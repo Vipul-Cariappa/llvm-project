@@ -20,6 +20,8 @@
 #include "llvm/Support/CrashRecoveryContext.h"
 #include "llvm/Support/Error.h"
 
+#include <clang/AST/DeclBase.h>
+#include <llvm/Support/Casting.h>
 #include <sstream>
 
 namespace clang {
@@ -156,20 +158,23 @@ void IncrementalParser::CleanUpPTU(TranslationUnitDecl *MostRecentTU) {
   if (StoredDeclsMap *Map = MostRecentTU->getPrimaryContext()->getLookupPtr()) {
     for (auto &&[Key, List] : *Map) {
       DeclContextLookupResult R = List.getLookupResult();
-      std::vector<NamedDecl *> NamedDeclsToRemove;
       bool RemoveAll = true;
       for (NamedDecl *D : R) {
-        if (D->getTranslationUnitDecl() == MostRecentTU)
-          NamedDeclsToRemove.push_back(D);
-        else
+        if (D->getTranslationUnitDecl() != MostRecentTU) {
           RemoveAll = false;
-      }
-      if (LLVM_LIKELY(RemoveAll)) {
-        Map->erase(Key);
-      } else {
-        for (NamedDecl *D : NamedDeclsToRemove)
+          continue;
+        }
+
+        if (auto *DC = llvm::dyn_cast<DeclContext>(D);
+            DC && D->getCanonicalDecl()->getTranslationUnitDecl() != MostRecentTU) {
+          RemoveAll = false;
+          for (auto *DeclInDC: DC->decls())
+            DC->removeDecl(DeclInDC);
+        } else
           List.remove(D);
       }
+      if (LLVM_LIKELY(RemoveAll))
+        Map->erase(Key);
     }
   }
 
