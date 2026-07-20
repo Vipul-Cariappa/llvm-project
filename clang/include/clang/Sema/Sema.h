@@ -12543,6 +12543,7 @@ public:
   void MarkAsLateParsedTemplate(FunctionDecl *FD, Decl *FnD,
                                 CachedTokens &Toks);
   void UnmarkAsLateParsedTemplate(FunctionDecl *FD);
+  bool ParseLateFunctionDefinition(FunctionDecl *FD);
   bool IsInsideALocalClassWithinATemplateFunction();
 
   /// We've found a use of a templated declaration that would trigger an

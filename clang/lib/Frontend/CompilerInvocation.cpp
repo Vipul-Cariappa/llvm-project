@@ -4127,6 +4127,11 @@ bool CompilerInvocation::ParseLangArgs(LangOptions &Opts, ArgList &Args,
 #include "clang/Options/Options.inc"
 #undef LANG_OPTION_WITH_MARSHALLING
 
+  // delayed parsing has incompatible lookup semantics with ondemand parsing
+  if (Opts.ParseFunctionsOnDemand && Opts.DelayedTemplateParsing)
+    Diags.Report(diag::err_drv_argument_not_allowed_with)
+        << "-fparse-functions-ondemand" << "-fdelayed-template-parsing";
+
   // "Modules semantics" (e.g. cross-translation-unit declaration merging) are
   // needed for both Clang (header) modules and C++20 modules, so enable them
   // for either.

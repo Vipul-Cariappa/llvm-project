@@ -1125,6 +1125,44 @@ static void DeclareImplicitMemberFunctionsWithName(Sema &S,
   }
 }
 
+static bool IsVisibleAtLateParsedLookupPoint(Sema &S, SourceLocation LookupLoc,
+                                             NamedDecl *D) {
+  if (!S.getLangOpts().ParseFunctionsOnDemand)
+    return true;
+
+  if (D->isImplicit())
+    return true;
+
+  auto *FD = dyn_cast_or_null<FunctionDecl>(S.CurContext);
+  if (!FD || !FD->isLateTemplateParsed())
+    return true;
+
+  SourceLocation DeclLoc = D->getCanonicalDecl()->getLocation();
+
+  // can this be an assert on valid source locations at this point?
+  if (DeclLoc.isInvalid() || LookupLoc.isInvalid())
+    return true;
+
+  if (DeclLoc == LookupLoc ||
+      S.getSourceManager().isBeforeInTranslationUnit(DeclLoc, LookupLoc))
+    return true;
+
+  if (auto *CXXMD = dyn_cast<CXXMethodDecl>(FD)) {
+    if (auto *RD = CXXMD->getParent()->getDefinition()) {
+      if (RD->getEndLoc().isInvalid())
+        return true;
+      return S.getSourceManager().isBeforeInTranslationUnit(DeclLoc,
+                                                            RD->getEndLoc());
+    }
+  }
+  return false;
+}
+
+static bool IsVisibleAtLateParsedLookupPoint(Sema &S, LookupResult &R,
+                                             NamedDecl *D) {
+  return IsVisibleAtLateParsedLookupPoint(S, R.getLookupNameInfo().getLoc(), D);
+}
+
 // Adds all qualifying matches for a name within a decl context to the
 // given lookup result.  Returns true if any matches were found.
 static bool LookupDirect(Sema &S, LookupResult &R, const DeclContext *DC) {
@@ -1139,8 +1177,10 @@ static bool LookupDirect(Sema &S, LookupResult &R, const DeclContext *DC) {
   DeclContext::lookup_result DR = DC->lookup(R.getLookupName());
   for (NamedDecl *D : DR) {
     if ((D = R.getAcceptableDecl(D))) {
-      R.addDecl(D);
-      Found = true;
+      if (IsVisibleAtLateParsedLookupPoint(S, R, D)) {
+        R.addDecl(D);
+        Found = true;
+      }
     }
   }
 
@@ -1347,7 +1387,8 @@ bool Sema::CppLookupName(LookupResult &R, Scope *S) {
     bool SearchNamespaceScope = true;
     // Check whether the IdResolver has anything in this scope.
     for (; I != IEnd && S->isDeclScope(*I); ++I) {
-      if (NamedDecl *ND = R.getAcceptableDecl(*I)) {
+      if (NamedDecl *ND = R.getAcceptableDecl(*I);
+          ND && IsVisibleAtLateParsedLookupPoint(*this, R, ND)) {
         if (NameKind == LookupRedeclarationWithLinkage &&
             !(*I)->isTemplateParameter()) {
           // If it's a template parameter, we still find it, so we can diagnose
@@ -1500,7 +1541,8 @@ bool Sema::CppLookupName(LookupResult &R, Scope *S) {
     // Check whether the IdResolver has anything in this scope.
     bool Found = false;
     for (; I != IEnd && S->isDeclScope(*I); ++I) {
-      if (NamedDecl *ND = R.getAcceptableDecl(*I)) {
+      if (NamedDecl *ND = R.getAcceptableDecl(*I);
+          ND && IsVisibleAtLateParsedLookupPoint(*this, R, ND)) {
         // We found something.  Look for anything else in our scope
         // with this same name and in an acceptable identifier
         // namespace, so that we can construct an overload set if we
@@ -2243,7 +2285,8 @@ bool Sema::LookupName(LookupResult &R, Scope *S, bool AllowBuiltinCreation,
     for (IdentifierResolver::iterator I = IdResolver.begin(Name),
                                    IEnd = IdResolver.end();
          I != IEnd; ++I)
-      if (NamedDecl *D = R.getAcceptableDecl(*I)) {
+      if (NamedDecl *D = R.getAcceptableDecl(*I);
+          D && IsVisibleAtLateParsedLookupPoint(*this, R, D)) {
         if (NameKind == LookupRedeclarationWithLinkage) {
           // Determine whether this (or a previous) declaration is
           // out-of-scope.
@@ -2297,7 +2340,8 @@ bool Sema::LookupName(LookupResult &R, Scope *S, bool AllowBuiltinCreation,
             }
 
             // If the declaration is in the right namespace and visible, add it.
-            if (NamedDecl *LastD = R.getAcceptableDecl(*LastI))
+            if (NamedDecl *LastD = R.getAcceptableDecl(*LastI);
+                LastD && IsVisibleAtLateParsedLookupPoint(*this, R, LastD))
               R.addDecl(LastD);
           }
 
@@ -3918,6 +3962,8 @@ void Sema::ArgumentDependentLookup(DeclarationName Name, SourceLocation Loc,
 
       if (!isa<FunctionDecl>(Underlying) &&
           !isa<FunctionTemplateDecl>(Underlying))
+        continue;
+      if (!IsVisibleAtLateParsedLookupPoint(*this, Loc, D))
         continue;
 
       // The declaration is visible to argument-dependent lookup if either

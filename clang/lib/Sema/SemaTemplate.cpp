@@ -11763,6 +11763,26 @@ void Sema::UnmarkAsLateParsedTemplate(FunctionDecl *FD) {
   FD->setLateTemplateParsed(false);
 }
 
+bool Sema::ParseLateFunctionDefinition(FunctionDecl *FD) {
+  if (!getLangOpts().ParseFunctionsOnDemand || !FD ||
+      !FD->isLateTemplateParsed() || FD->getBody() || FD->willHaveBody() ||
+      FD->getTemplatedKind() != FunctionDecl::TK_NonTemplate)
+    return false;
+
+  if (!LateTemplateParser)
+    return false;
+
+  if (FD->isFromASTFile() && ExternalSource)
+    ExternalSource->ReadLateParsedTemplates(LateParsedTemplateMap);
+
+  auto LPTIter = LateParsedTemplateMap.find(FD);
+  if (LPTIter == LateParsedTemplateMap.end())
+    return false;
+
+  LateTemplateParser(OpaqueParser, *LPTIter->second);
+  return FD->getBody() != nullptr;
+}
+
 bool Sema::IsInsideALocalClassWithinATemplateFunction() {
   DeclContext *DC = CurContext;
 
