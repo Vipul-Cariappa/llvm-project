@@ -1244,8 +1244,8 @@ Decl *Parser::ParseFunctionDefinition(ParsingDeclarator &D,
   bool IsDelayedTemplateFunction =
       getLangOpts().DelayedTemplateParsing &&
       TemplateInfo.Kind == ParsedTemplateKind::Template && CanDelayFunctionBody;
-  bool ShouldProbeInternalLinkage = getLangOpts().ParseFunctionsOnDemand &&
-                                    !CurParsedObjCImpl && CanDelayFunctionBody;
+  bool ShouldParseOnDemand = getLangOpts().ParseFunctionsOnDemand &&
+                             !CurParsedObjCImpl && CanDelayFunctionBody;
 
   // Enter a scope for the function body.
   ParseScope BodyScope(this, Scope::FnScope | Scope::DeclScope |
@@ -1277,17 +1277,14 @@ Decl *Parser::ParseFunctionDefinition(ParsingDeclarator &D,
           .ActOnFinishedFunctionDefinitionInOpenMPDeclareVariantScope(D, Bases);
   };
 
-  // For function templates in delayed template parsing mode, and for
-  // internal-linkage functions in on-demand parsing mode, consume the tokens
-  // and store them for late parsing.
+  // For function templates in delayed template parsing mode, and for any
+  // function definition in on-demand parsing mode, consume the tokens and
+  // store them for late parsing.
   if (Tok.isNot(tok::equal) && LateParsedAttrs->empty() &&
-      (IsDelayedTemplateFunction || ShouldProbeInternalLinkage)) {
+      (IsDelayedTemplateFunction || ShouldParseOnDemand)) {
     FunctionDecl *FnD = FuncDecl ? FuncDecl->getAsFunction() : nullptr;
-    bool ShouldDelayFunction =
-        !FnD->isUsed(/*CheckUsedAttr=*/true) &&
-        FnD->isDefinedOutsideFunctionOrMethod() &&
-        (IsDelayedTemplateFunction || (FnD && !FnD->isExternallyVisible()) ||
-         TemplateInfo.Kind == ParsedTemplateKind::Template);
+    bool ShouldDelayFunction = FnD && !FnD->isUsed(/*CheckUsedAttr=*/true) &&
+                               FnD->isDefinedOutsideFunctionOrMethod();
     if (ShouldDelayFunction) {
       if (SkipFunctionBodies &&
           (!FuncDecl || Actions.canSkipFunctionBody(FuncDecl)) &&

@@ -760,6 +760,11 @@ def warn_drv_parse_functions_ondemand_ignored : Warning<
   "%select{precompiled header|module}0; flag ignored">,
   InGroup<OptionIgnored>;
 
+def warn_drv_parse_functions_ondemand_not_incremental : Warning<
+  "option '-fparse-functions-ondemand' is only supported with "
+  "'-fincremental-extensions'; flag ignored">,
+  InGroup<OptionIgnored>;
+
 def err_drv_profile_instrument_use_path_with_no_kind : Error<
   "option '-fprofile-instrument-use-path=' requires -fprofile-instrument-use=<kind>">;
 

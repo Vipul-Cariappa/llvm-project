@@ -3572,7 +3572,8 @@ defm delayed_template_parsing : BoolFOption<"delayed-template-parsing",
 defm parse_functions_ondemand : BoolFOption<"parse-functions-ondemand",
   LangOpts<"ParseFunctionsOnDemand">, DefaultFalse,
   PosFlag<SetTrue, [], [ClangOption, CC1Option],
-          "Parse internal-linkage function definitions on demand">,
+          "Parse function definitions on demand, when the function is used "
+          "(requires -fincremental-extensions)">,
   NegFlag<SetFalse, [], [], "Disable on-demand function parsing">,
   BothFlags<[], [ClangOption, CLOption]>>;
 def fms_memptr_rep_EQ : Joined<["-"], "fms-memptr-rep=">, Group<f_Group>,

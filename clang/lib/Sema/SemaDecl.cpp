@@ -1382,8 +1382,14 @@ Sema::getTemplateNameKindForDiagnostics(TemplateName Name) {
 }
 
 void Sema::PushDeclContext(Scope *S, DeclContext *DC) {
-  assert(DC->getLexicalParent() == CurContext &&
-      "The next DeclContext should be lexically contained in the current one.");
+  // FIXME: With on-demand parsing a late-parsed body is reentered long after
+  // its enclosing contexts were left, and in incremental processing mode the
+  // enclosing translation unit declaration may not be the current one, so the
+  // context being pushed is not lexically contained in CurContext.
+  assert((getLangOpts().ParseFunctionsOnDemand ||
+          DC->getLexicalParent() == CurContext) &&
+         "The next DeclContext should be lexically contained in the current "
+         "one.");
   CurContext = DC;
   if (S)
     S->setEntity(DC);

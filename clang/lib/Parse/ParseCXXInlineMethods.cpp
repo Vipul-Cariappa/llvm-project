@@ -154,15 +154,15 @@ NamedDecl *Parser::ParseCXXInlineMethodDef(
   // In delayed template parsing mode, if we are within a class template
   // or if we are about to parse function member template then consume
   // the tokens and store them for parsing at the end of the translation unit.
-  // In on-demand parsing mode, internal-linkage member definitions are also
-  // handled in the same way.
+  // In on-demand parsing mode, all member definitions are handled in the same
+  // way.
   if (D.getFunctionDefinitionKind() == FunctionDefinitionKind::Definition &&
       !D.getDeclSpec().hasConstexprSpecifier() &&
       !(FD && FD->getReturnType()->getContainedAutoType()) &&
       !Actions.IsInsideALocalClassWithinATemplateFunction() &&
       ((getLangOpts().DelayedTemplateParsing && IsDelayedTemplateFunction) ||
        (getLangOpts().ParseFunctionsOnDemand &&
-        ((FD && !FD->isExternallyVisible() &&
+        ((FD && !FD->isUsed(/*CheckUsedAttr=*/true) &&
           FD->isDefinedOutsideFunctionOrMethod()) ||
          IsDelayedTemplateFunction)))) {
 

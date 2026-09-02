@@ -4132,6 +4132,16 @@ bool CompilerInvocation::ParseLangArgs(LangOptions &Opts, ArgList &Args,
     Diags.Report(diag::err_drv_argument_not_allowed_with)
         << "-fparse-functions-ondemand" << "-fdelayed-template-parsing";
 
+  // On-demand parsing leaves the bodies of unused functions unparsed, so the
+  // functions are never emitted. That is only safe when nothing outside of
+  // this translation unit can refer to them, i.e. in incremental processing
+  // mode (clang-repl), where each fragment is compiled and executed as it is
+  // parsed.
+  if (Opts.ParseFunctionsOnDemand && !Opts.IncrementalExtensions) {
+    Opts.ParseFunctionsOnDemand = false;
+    Diags.Report(diag::warn_drv_parse_functions_ondemand_not_incremental);
+  }
+
   // "Modules semantics" (e.g. cross-translation-unit declaration merging) are
   // needed for both Clang (header) modules and C++20 modules, so enable them
   // for either.

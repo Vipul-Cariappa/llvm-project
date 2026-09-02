@@ -1,10 +1,11 @@
-// RUN: %clang_cc1 -fparse-functions-ondemand -fsyntax-only -verify -Wall -Wextra -Werror -ferror-limit 0 -std=c++11 %s
-// RUN: not %clang_cc1 -fparse-functions-ondemand -fdelayed-template-parsing -fsyntax-only -std=c++11 %s 2>&1 | FileCheck %s --check-prefix=MUTEX
+// RUN: %clang_cc1 -fincremental-extensions -fparse-functions-ondemand -fsyntax-only -verify -Wall -Wextra -Werror -ferror-limit 0 -std=c++11 %s
+// RUN: not %clang_cc1 -fincremental-extensions -fparse-functions-ondemand -fdelayed-template-parsing -fsyntax-only -std=c++11 %s 2>&1 | FileCheck %s --check-prefix=MUTEX
 
 // MUTEX: error: invalid argument '-fparse-functions-ondemand' not allowed with '-fdelayed-template-parsing'
 
-// Internal-linkage bodies are parsed only when referenced; external ones eagerly.
-namespace InternalFunctionBodies {
+// Function bodies are parsed only when the function is referenced, regardless of
+// linkage.
+namespace FunctionBodies {
 static void static_diagnoses_on_use() {
   undeclared_static(); // expected-error {{use of undeclared identifier 'undeclared_static'}}
 }
@@ -29,8 +30,12 @@ void unreferenced_anon_namespace_function() {
 }
 } // namespace
 
-void external_function_diagnoses_eagerly() {
-  undeclared_external(); // expected-error {{use of undeclared identifier 'undeclared_external'}}
+void unreferenced_external_body_is_delayed() {
+  undeclared_external(); // this should not give an error
+}
+
+void referenced_external_diagnoses_on_use() {
+  undeclared_referenced_external(); // expected-error {{use of undeclared identifier 'undeclared_referenced_external'}}
 }
 
 static void unreferenced_static_body_is_delayed() {
@@ -41,12 +46,13 @@ __attribute__((used)) static int attribute_used_body_is_parsed() {
   return undeclared_attribute_used(); // expected-error {{use of undeclared identifier 'undeclared_attribute_used'}}
 }
 
-void trigger_internal_function_bodies() {
+__attribute__((used)) void trigger_internal_function_bodies() {
   static_diagnoses_on_use();
   prior_static();
   anon_namespace_function();
+  referenced_external_diagnoses_on_use();
 }
-} // namespace InternalFunctionBodies
+} // namespace FunctionBodies
 
 // A delayed body resolves overloads using only those declared before it.
 namespace SourceOrderOverloads {
@@ -71,7 +77,7 @@ static void call_both_overloads_before() {
   Two _ = foo_both_before(0.0);
 }
 
-void trigger_source_order_overloads() {
+__attribute__((used)) void trigger_source_order_overloads() {
   call_before_later_overload();
   call_forward_declared_overload();
   call_both_overloads_before();
@@ -94,7 +100,7 @@ static int builtin_lookup_still_works() {
   return __builtin_abs(-1);
 }
 
-void trigger_namespace_scope_source_order() {
+__attribute__((used)) void trigger_namespace_scope_source_order() {
   later_variable_hidden();
   later_function_hidden();
   builtin_lookup_still_works();
@@ -149,7 +155,7 @@ struct InternalClass {
 int InternalClass::later_static_member = 10;
 int later_global_after_class = 10;
 
-void trigger_class_method_lookup() {
+__attribute__((used)) void trigger_class_method_lookup() {
   InternalClass object;
   object.sees_later_member();
   object.diagnoses_on_use();
@@ -181,7 +187,7 @@ int S::hides_later_global() {
 int later_global; // expected-note 2 {{'OutOfClassMethods::later_global' declared here}}
 } // namespace
 
-void trigger_out_of_class_methods() {
+__attribute__((used)) void trigger_out_of_class_methods() {
   S s;
   s.sees_prior_global();
   s.hides_later_global();
@@ -222,7 +228,7 @@ struct FriendClass {
 
 int later_global;
 
-void trigger_friend_functions_and_classes() {
+__attribute__((used)) void trigger_friend_functions_and_classes() {
   friend_function_prior(FriendFunctionPrior{});
   friend_function_later(FriendFunctionLater{});
   FriendClass::sees_prior_global();
@@ -258,7 +264,7 @@ static void adl_prior_function_visible() {
   One _ = adl_target(a);
 }
 
-void trigger_adl_lookup() {
+__attribute__((used)) void trigger_adl_lookup() {
   adl_later_function_hidden();
   adl_prior_function_visible();
 }
@@ -287,7 +293,7 @@ static void qualified_prior_function_visible() {
   One _ = Visible::h();
 }
 
-void trigger_qualified_lookup() {
+__attribute__((used)) void trigger_qualified_lookup() {
   qualified_later_function_hidden();
   qualified_prior_function_visible();
 }
@@ -318,7 +324,7 @@ struct DefaultedConstructor {
 
 // Local-class member bodies are parsed with their enclosing function's body.
 namespace LocalClassCases {
-void local_class_method_diagnoses_on_use() {
+__attribute__((used)) void local_class_method_diagnoses_on_use() {
   struct S {
     void f() {
       undeclared_in_local_class(); // expected-error {{use of undeclared identifier 'undeclared_in_local_class'}}
@@ -329,7 +335,7 @@ void local_class_method_diagnoses_on_use() {
   s.f();
 }
 
-void local_class_method_sees_local_typedef() {
+__attribute__((used)) void local_class_method_sees_local_typedef() {
   typedef int T;
   struct S {
     T f() { return 0; }
@@ -342,7 +348,7 @@ void local_class_method_sees_local_typedef() {
 // A local-class member body can name a sibling local declaration, so it must be
 // parsed with its enclosing function rather than deferred and re-parsed at the
 // end of the TU (where the enclosing scope is gone).
-void local_class_method_sees_sibling_local_class() {
+__attribute__((used)) void local_class_method_sees_sibling_local_class() {
   struct Helper {
     int value() { return 7; }
   };
@@ -359,7 +365,7 @@ void local_class_method_sees_sibling_local_class() {
 
 // Same, but the referencing member is reached through the vtable of a locally
 // constructed object.
-void local_class_virtual_method_sees_sibling_local_class() {
+__attribute__((used)) void local_class_virtual_method_sees_sibling_local_class() {
   struct Helper {
     int value() { return 7; }
   };
@@ -395,7 +401,7 @@ struct Iter {
   void *node;
 };
 
-bool trigger_hidden_friend_member_order() {
+__attribute__((used)) bool trigger_hidden_friend_member_order() {
   Iter<int> a{}, b{};
   return a == b || a != b;
 }
@@ -466,7 +472,7 @@ struct Derived : Base {
 };
 } // namespace
 
-void trigger_virtual_functions() {
+__attribute__((used)) void trigger_virtual_functions() {
   UsedObject used;
   (void)used;
 
@@ -502,7 +508,7 @@ static Polymorphic &get_instance() {
   return instance;
 }
 
-void trigger_vtable_used_in_deferred_function() {
+__attribute__((used)) void trigger_vtable_used_in_deferred_function() {
   get_instance();
 }
 } // namespace VTableUsedInDeferredFunction
@@ -534,7 +540,7 @@ bool Parser::parse(InternalField2 &field) {
 }
 } // namespace ExplicitSpecialization
 
-void trigger_explici_specialization() {
+__attribute__((used)) void trigger_explici_specialization() {
     ExplicitSpecialization::Parser p;
     ExplicitSpecialization::InternalField2 f;
     p.parse(f);
@@ -557,7 +563,7 @@ struct Emitter {
     emit(Builder());
   }
 };
-void trigger_sfinae_with_capturing_lambda(Emitter &E) {
+__attribute__((used)) void trigger_sfinae_with_capturing_lambda(Emitter &E) {
   int local = 0;
   E.emit([&]() { return Diag{local}; });
 }
@@ -582,7 +588,7 @@ struct T {
 };
 } // namespace
 
-void trigger_anonymous_namespace_template_lookup() {
+__attribute__((used)) void trigger_anonymous_namespace_template_lookup() {
   T t;
   call_foo(t);
   (void)call_bar(t);
@@ -596,7 +602,7 @@ void template_body_diagnoses_on_instantiation() {
   undeclared_in_template(); // expected-error {{use of undeclared identifier 'undeclared_in_template'}}
 }
 
-void trigger_template_cases() {
+__attribute__((used)) void trigger_template_cases() {
   template_body_diagnoses_on_instantiation<int>();
 }
 } // namespace TemplateCases

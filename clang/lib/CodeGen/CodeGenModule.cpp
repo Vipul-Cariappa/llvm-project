@@ -4701,6 +4701,13 @@ void CodeGenModule::EmitGlobal(GlobalDecl GD) {
         DeferredAnnotations[MangledName] = FD;
     }
 
+    // With on-demand parsing a deferred definition claims to have a body (it
+    // is late-parsed) while the body has not been parsed yet. There is nothing
+    // to emit; Sema notifies us again once the body becomes available.
+    if (getLangOpts().ParseFunctionsOnDemand && FD->isLateTemplateParsed() &&
+        !FD->getBody())
+      return;
+
     // Forward declarations are emitted lazily on first use.
     if (!FD->doesThisDeclarationHaveABody()) {
       if (!FD->doesDeclarationForceExternallyVisibleDefinition() &&

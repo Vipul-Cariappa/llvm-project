@@ -154,24 +154,30 @@ IncrementalParser::Parse(llvm::StringRef input) {
                                                std::error_code());
 
   auto PTU = ParseOrWrapTopLevelDecl();
-  if (!PTU)
-    return PTU.takeError();
 
-  if (PP.getLangOpts().DelayedTemplateParsing) {
+  if (PP.getLangOpts().DelayedTemplateParsing ||
+      PP.getLangOpts().ParseFunctionsOnDemand) {
     // Microsoft-specific:
     // Late parsed templates can leave unswallowed "macro"-like tokens.
     // They will seriously confuse the Parser when entering the next
     // source file. So lex until we are EOF.
+    // On-demand parsing late-parses ordinary function bodies the same way, and
+    // it leaves the same leftovers. Drain them even when the input failed to
+    // parse: the token stream outlives the partial translation unit we are
+    // about to throw away.
     Token Tok;
     do {
       PP.Lex(Tok);
     } while (Tok.isNot(tok::annot_repl_input_end));
-  } else {
+  } else if (PTU) {
     Token AssertTok;
     PP.Lex(AssertTok);
     assert(AssertTok.is(tok::annot_repl_input_end) &&
            "Lexer must be EOF when starting incremental parse!");
   }
+
+  if (!PTU)
+    return PTU.takeError();
 
   return PTU;
 }

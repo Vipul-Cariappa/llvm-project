@@ -7275,7 +7275,12 @@ void Sema::PerformPendingInstantiations(bool LocalOnly, bool AtEndOfTU) {
           (Function->getTemplatedKind() == FunctionDecl::TK_NonTemplate ||
            Function->getTemplateSpecializationKind() ==
                TSK_ExplicitSpecialization)) {
-        ParseLateFunctionDefinition(Function);
+        if (ParseLateFunctionDefinition(Function)) {
+          // The body was not available when the declaration was handed to the
+          // consumer, so hand the definition over now that it is parsed.
+          DeclGroupRef DG(Function);
+          Consumer.HandleTopLevelDecl(DG);
+        }
         if (Function->isDefined())
           Function->setInstantiationIsPending(false);
         continue;
