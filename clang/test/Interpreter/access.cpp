@@ -1,5 +1,6 @@
 // REQUIRES: host-supports-jit
 // RUN: cat %s | clang-repl 2>&1 | FileCheck %s
+// RUN: cat %s | clang-repl -Xcc -fparse-functions-ondemand 2>&1 | FileCheck %s
 
 struct A { };
 

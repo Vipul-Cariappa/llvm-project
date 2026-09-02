@@ -2,6 +2,8 @@
 // RUN:   clang-repl -Xcc -fno-color-diagnostics -Xcc -Xclang -Xcc -ast-dump \
 // RUN:            -Xcc -Xclang -Xcc -ast-dump-filter -Xcc -Xclang -Xcc Test 2>&1| \
 // RUN:         FileCheck %s
+// On-demand parsing is deliberately not covered here: it leaves the body of the
+// unused TestFunc unparsed, so the AST dump has no CompoundStmt to check.
 
 int TestVar = 12;
 // CHECK: Dumping TestVar:

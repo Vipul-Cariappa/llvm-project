@@ -16,6 +16,10 @@
 // RUN:     | not clang-repl -Xcc=-std=c++20 -Xcc=-fmodule-file=M=%t/mod.pcm \
 // RUN:           -Xcc=--target=x86_64-linux-gnu 2>&1 \
 // RUN:     | FileCheck %s
+// RUN: echo '// empty' \
+// RUN:     | not clang-repl -Xcc -fparse-functions-ondemand -Xcc=-std=c++20 -Xcc=-fmodule-file=M=%t/mod.pcm \
+// RUN:           -Xcc=--target=x86_64-linux-gnu 2>&1 \
+// RUN:     | FileCheck %s
 
 //--- mod.cppm
 export module M;

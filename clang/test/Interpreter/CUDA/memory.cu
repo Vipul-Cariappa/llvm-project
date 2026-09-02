@@ -1,5 +1,6 @@
 // Tests cudaMemcpy and writes from kernel
 // RUN: cat %s | clang-repl --cuda | FileCheck %s
+// RUN: cat %s | clang-repl -Xcc -fparse-functions-ondemand --cuda | FileCheck %s
 
 extern "C" int printf(const char*, ...);
 

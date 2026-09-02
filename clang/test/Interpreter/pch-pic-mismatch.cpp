@@ -14,9 +14,14 @@
 //
 // RUN: %clang_cc1 -triple %host-jit-triple -fincremental-extensions \
 // RUN:     -emit-pch -x c++-header -o %t/include.pch %t/include.hpp
+// RUN: %clang_cc1 -triple %host-jit-triple -fincremental-extensions -fparse-functions-ondemand \
+// RUN:     -emit-pch -x c++-header -o %t/include.pch %t/include.hpp
 //
 // RUN: cat %t/main.cpp \
 // RUN:     | not clang-repl -Xcc -include-pch -Xcc %t/include.pch 2>&1 \
+// RUN:     | FileCheck %s
+// RUN: cat %t/main.cpp \
+// RUN:     | not clang-repl -Xcc -fparse-functions-ondemand -Xcc -include-pch -Xcc %t/include.pch 2>&1 \
 // RUN:     | FileCheck %s
 
 //--- include.hpp

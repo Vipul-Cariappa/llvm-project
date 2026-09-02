@@ -1,7 +1,9 @@
 // REQUIRES: host-supports-jit
 //
 // RUN: cat %s | clang-repl | FileCheck %s
+// RUN: cat %s | clang-repl -Xcc -fparse-functions-ondemand | FileCheck %s
 // RUN: cat %s | clang-repl -Xcc -O2 | FileCheck %s
+// RUN: cat %s | clang-repl -Xcc -fparse-functions-ondemand -Xcc -O2 | FileCheck %s
 
 struct box { box() = default; box(int *const data) : data{data} {} int *data{}; };
 

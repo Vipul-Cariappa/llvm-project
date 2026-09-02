@@ -1,7 +1,9 @@
 // REQUIRES: host-supports-jit
 
 // RUN: cat %s | clang-repl -Xcc -xc -Xcc -Xclang -Xcc -verify | FileCheck %s
+// RUN: cat %s | clang-repl -Xcc -fparse-functions-ondemand -Xcc -xc -Xcc -Xclang -Xcc -verify | FileCheck %s
 // RUN: cat %s | clang-repl -Xcc -xc -Xcc -O2 -Xcc -Xclang -Xcc -verify| FileCheck %s
+// RUN: cat %s | clang-repl -Xcc -fparse-functions-ondemand -Xcc -xc -Xcc -O2 -Xcc -Xclang -Xcc -verify| FileCheck %s
 int printf(const char *, ...);
 int i = 42; err // expected-error{{use of undeclared identifier}}
 int i = 42;

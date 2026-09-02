@@ -1,12 +1,18 @@
 // clang-format off
 // RUN: clang-repl "int i = 10;" 'extern "C" int printf(const char*,...);' \
 // RUN:            'auto r1 = printf("i = %d\n", i);' | FileCheck --check-prefix=CHECK-DRIVER %s
+// RUN: clang-repl -Xcc -fparse-functions-ondemand "int i = 10;" 'extern "C" int printf(const char*,...);' \
+// RUN:            'auto r1 = printf("i = %d\n", i);' | FileCheck --check-prefix=CHECK-DRIVER %s
 // CHECK-DRIVER: i = 10
 
 // RUN: cat %s | clang-repl | FileCheck %s
+// RUN: cat %s | clang-repl -Xcc -fparse-functions-ondemand | FileCheck %s
 // RUN: cat %s | clang-repl -Xcc -O2 | FileCheck %s
+// RUN: cat %s | clang-repl -Xcc -fparse-functions-ondemand -Xcc -O2 | FileCheck %s
 // RUN: clang-repl -Xcc -include -Xcc %s | FileCheck %s
+// RUN: clang-repl -Xcc -fparse-functions-ondemand -Xcc -include -Xcc %s | FileCheck %s
 // RUN: clang-repl -Xcc -fsyntax-only -Xcc -include -Xcc %s
+// RUN: clang-repl -Xcc -fparse-functions-ondemand -Xcc -fsyntax-only -Xcc -include -Xcc %s
 extern "C" int printf(const char *, ...);
 int i = 42;
 auto r1 = printf("i = %d\n", i);

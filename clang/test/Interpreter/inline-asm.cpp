@@ -5,6 +5,7 @@
 // RUN: split-file %s %t
 //
 // RUN: cat %t/inline-asm.txt | clang-repl -Xcc="-I%t"
+// RUN: cat %t/inline-asm.txt | clang-repl -Xcc -fparse-functions-ondemand -Xcc="-I%t"
 
 //--- inline-asm.cpp
 __asm(".globl _ZSt21ios_base_library_initv");

@@ -1,6 +1,7 @@
 // REQUIRES: host-supports-jit,  host-supports-out-of-process-jit, x86_64-linux
 
 // RUN: cat %s | clang-repl -oop-executor -orc-runtime | FileCheck %s
+// RUN: cat %s | clang-repl -Xcc -fparse-functions-ondemand -oop-executor -orc-runtime | FileCheck %s
 
 extern "C" int printf(const char *, ...);
 

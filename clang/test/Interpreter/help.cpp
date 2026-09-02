@@ -1,4 +1,5 @@
 // RUN: cat %s | clang-repl | FileCheck %s
+// RUN: cat %s | clang-repl -Xcc -fparse-functions-ondemand | FileCheck %s
 %help
 // CHECK: %help   list clang-repl %commands
 // CHECK-NEXT: %undo   undo the previous input

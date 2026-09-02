@@ -15,6 +15,9 @@
 // RUN: cat %t/main.cpp \
 // RUN:     | clang-repl -Xcc -fgnuc-version=0 -Xcc -fno-stack-protector -Xcc -fwrapv -Xcc -fblocks -Xcc -fskip-odr-check-in-gmf -Xcc -fmax-type-align=8 -Xcc -include-pch -Xcc %t/include.pch \
 // RUN:     | FileCheck %s
+// RUN: cat %t/main.cpp \
+// RUN:     | clang-repl -Xcc -fparse-functions-ondemand -Xcc -fgnuc-version=0 -Xcc -fno-stack-protector -Xcc -fwrapv -Xcc -fblocks -Xcc -fskip-odr-check-in-gmf -Xcc -fmax-type-align=8 -Xcc -include-pch -Xcc %t/include.pch \
+// RUN:     | FileCheck %s
 
 //--- include.hpp
 

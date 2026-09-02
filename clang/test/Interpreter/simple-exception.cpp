@@ -2,6 +2,7 @@
 // XFAIL for arm, or running on Windows.
 // XFAIL: target=arm-{{.*}}, target=armv{{.*}}, system-windows, system-cygwin
 // RUN: cat %s | clang-repl | FileCheck %s
+// RUN: cat %s | clang-repl -Xcc -fparse-functions-ondemand | FileCheck %s
 
 // Incompatible with msan. It passes with -O3 but fail -Oz. Interpreter
 // generates non-instrumented code, which may call back to instrumented.

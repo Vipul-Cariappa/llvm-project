@@ -14,6 +14,9 @@
 // RUN: cat %t/import.cpp | env LD_LIBRARY_PATH=%t:%ld_library_path \
 // RUN:     clang-repl -Xcc=-std=c++20 -Xcc=-fmodule-file=M=%t/mod.pcm \
 // RUN:     -Xcc=--target=x86_64-linux-gnu | FileCheck %t/import.cpp
+// RUN: cat %t/import.cpp | env LD_LIBRARY_PATH=%t:%ld_library_path \
+// RUN:     clang-repl -Xcc -fparse-functions-ondemand -Xcc=-std=c++20 -Xcc=-fmodule-file=M=%t/mod.pcm \
+// RUN:     -Xcc=--target=x86_64-linux-gnu | FileCheck %t/import.cpp
 
 //--- mod.cppm
 export module M;

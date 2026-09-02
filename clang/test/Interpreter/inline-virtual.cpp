@@ -7,7 +7,11 @@
 // where the JIT cannot find ??_7type_info@@6B@.
 // RUN: cat %s | clang-repl -Xcc -fno-rtti -Xcc -fno-sized-deallocation \
 // RUN:     | FileCheck %s
+// RUN: cat %s | clang-repl -Xcc -fparse-functions-ondemand -Xcc -fno-rtti -Xcc -fno-sized-deallocation \
+// RUN:     | FileCheck %s
 // RUN: cat %s | clang-repl -Xcc -fno-rtti -Xcc -fno-sized-deallocation \
+// RUN:     -Xcc -O2 | FileCheck %s
+// RUN: cat %s | clang-repl -Xcc -fparse-functions-ondemand -Xcc -fno-rtti -Xcc -fno-sized-deallocation \
 // RUN:     -Xcc -O2 | FileCheck %s
 
 extern "C" int printf(const char *, ...);

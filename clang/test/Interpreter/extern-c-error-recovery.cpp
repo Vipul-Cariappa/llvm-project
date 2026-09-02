@@ -1,7 +1,16 @@
 // REQUIRES: host-supports-jit
 // RUN: cat %s | clang-repl > %t.out 2>&1
-// RUN: FileCheck %s --input-file=%t.out
+// RUN: FileCheck %s --check-prefixes=CHECK,EAGER --input-file=%t.out
 // RUN: FileCheck %s --check-prefix=NEGATIVE --input-file=%t.out
+
+// On-demand parsing never parses the body of a function that is not used, so
+// an input whose only error is inside a function body succeeds, and the
+// definition it leaves behind is what the redefinitions at the bottom collide
+// with. Only the inputs that fail outside of a function body -- the variable
+// initializer -- still fail, and surviving those is what this test is about.
+// RUN: cat %s | clang-repl -Xcc -fparse-functions-ondemand > %t.ondemand.out 2>&1
+// RUN: FileCheck %s --check-prefixes=CHECK,ONDEMAND --input-file=%t.ondemand.out
+// RUN: FileCheck %s --check-prefix=ONDEMAND-NEGATIVE --input-file=%t.ondemand.out
 
 // An input that declares something with C language linkage and then fails must
 // not take the interpreter down with it.
@@ -29,7 +38,7 @@ printf("alive %d\n", 3);
 // generated destructor wrappers hit.
 class D { public: ~D() = delete; };
 extern "C" void g(D *p) { delete p; }
-// CHECK-DAG: error: attempt to use a deleted function
+// EAGER-DAG: error: attempt to use a deleted function
 printf("alive %d\n", 4);
 // CHECK-DAG: alive 4
 
@@ -51,13 +60,24 @@ extern "C" int v1 = 5;
 f1();
 f2();
 printf("v1 %d\n", v1);
-// CHECK-DAG: f1 ran
-// CHECK-DAG: f2 ran
+// EAGER-DAG: f1 ran
+// EAGER-DAG: f2 ran
 // CHECK-DAG: v1 5
+
+// In on-demand parsing mode the broken f1 and f2 above are still defined, so
+// these are real redefinitions. The definitions being rejected is the point:
+// what has to keep working is that the session survives it and that the
+// variable, whose failed input was discarded, is definable again.
+// ONDEMAND-DAG: error: redefinition of 'f1'
+// ONDEMAND-DAG: error: redefinition of 'f2'
 
 // Nothing anywhere in the session may claim the recovered definitions clash
 // with what the discarded inputs left behind.
 // NEGATIVE-NOT: error: redefinition
 // NEGATIVE-NOT: error: conflicting types
+
+// The redefinitions rejected in on-demand parsing mode are the two above; no
+// input may be reported as clashing with a type left behind by a failed one.
+// ONDEMAND-NEGATIVE-NOT: error: conflicting types
 
 %quit

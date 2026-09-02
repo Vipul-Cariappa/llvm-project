@@ -1,6 +1,9 @@
 // REQUIRES: host-supports-jit
 // RUN: cat %s | clang-repl -Xcc -Xclang -Xcc  -verify | FileCheck %s
+// RUN: cat %s | clang-repl -Xcc -fparse-functions-ondemand -Xcc -Xclang -Xcc  -verify | FileCheck %s
 // RUN: %clang_cc1 -verify -fincremental-extensions -emit-llvm -o -  %s \
+// RUN:           | FileCheck --check-prefix=CODEGEN-CHECK %s
+// RUN: %clang_cc1 -verify -fincremental-extensions -fparse-functions-ondemand -emit-llvm -o -  %s \
 // RUN:           | FileCheck --check-prefix=CODEGEN-CHECK %s
 
 // expected-no-diagnostics

@@ -1,5 +1,6 @@
 // REQUIRES: host-supports-jit
 // RUN: cat %s | clang-repl -Xcc -Xclang -Xcc -verify | FileCheck %s
+// RUN: cat %s | clang-repl -Xcc -fparse-functions-ondemand -Xcc -Xclang -Xcc -verify | FileCheck %s
 
 // expected-no-diagnostics
 

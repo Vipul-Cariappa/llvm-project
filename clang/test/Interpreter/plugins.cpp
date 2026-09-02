@@ -1,6 +1,9 @@
 // RUN: cat %s | clang-repl -Xcc -Xclang -Xcc -load -Xcc -Xclang \
 // RUN:            -Xcc %llvmshlibdir/PrintFunctionNames%pluginext -Xcc -Xclang\
 // RUN:            -Xcc -add-plugin -Xcc -Xclang -Xcc print-fns 2>&1 | FileCheck %s
+// RUN: cat %s | clang-repl -Xcc -fparse-functions-ondemand -Xcc -Xclang -Xcc -load -Xcc -Xclang \
+// RUN:            -Xcc %llvmshlibdir/PrintFunctionNames%pluginext -Xcc -Xclang\
+// RUN:            -Xcc -add-plugin -Xcc -Xclang -Xcc print-fns 2>&1 | FileCheck %s
 // REQUIRES: plugins, examples
 
 int i = 10;

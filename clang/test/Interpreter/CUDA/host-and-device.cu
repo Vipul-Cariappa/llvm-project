@@ -1,5 +1,6 @@
 // Checks that a function is available in both __host__ and __device__
 // RUN: cat %s | clang-repl --cuda | FileCheck %s
+// RUN: cat %s | clang-repl -Xcc -fparse-functions-ondemand --cuda | FileCheck %s
 
 extern "C" int printf(const char*, ...);
 

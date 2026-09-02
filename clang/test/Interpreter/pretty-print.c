@@ -1,7 +1,10 @@
 // REQUIRES: host-supports-jit
 // RUN: cat %s | clang-repl -Xcc -xc  | FileCheck %s
+// RUN: cat %s | clang-repl -Xcc -fparse-functions-ondemand -Xcc -xc  | FileCheck %s
 // RUN: cat %s | clang-repl -Xcc -std=c++11 | FileCheck %s
+// RUN: cat %s | clang-repl -Xcc -fparse-functions-ondemand -Xcc -std=c++11 | FileCheck %s
 // RUN: cat %s | clang-repl -Xcc -xc -Xcc -std=c89 | FileCheck %s
+// RUN: cat %s | clang-repl -Xcc -fparse-functions-ondemand -Xcc -xc -Xcc -std=c89 | FileCheck %s
 
 // UNSUPPORTED: hwasan, msan
 

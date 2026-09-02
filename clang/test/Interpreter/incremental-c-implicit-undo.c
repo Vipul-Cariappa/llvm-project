@@ -1,6 +1,8 @@
 // REQUIRES: host-supports-jit
 // RUN: cat %s | clang-repl -Xcc -x -Xcc c -Xcc -std=c17 -Xcc -fno-builtin -Xcc -Wno-error=implicit-function-declaration 2>&1 | FileCheck %s
+// RUN: cat %s | clang-repl -Xcc -fparse-functions-ondemand -Xcc -x -Xcc c -Xcc -std=c17 -Xcc -fno-builtin -Xcc -Wno-error=implicit-function-declaration 2>&1 | FileCheck %s
 // RUN: cat %s | clang-repl -Xcc -x -Xcc c -Xcc -std=c17 -Xcc -fno-builtin -Xcc -O2 -Xcc -Wno-error=implicit-function-declaration 2>&1 | FileCheck %s
+// RUN: cat %s | clang-repl -Xcc -fparse-functions-ondemand -Xcc -x -Xcc c -Xcc -std=c17 -Xcc -fno-builtin -Xcc -O2 -Xcc -Wno-error=implicit-function-declaration 2>&1 | FileCheck %s
 
 a();
 

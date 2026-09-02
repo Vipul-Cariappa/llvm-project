@@ -1,6 +1,8 @@
 // RUN: rm -rf %t
 // RUN: %clang_cc1 -std=c++20 -fincremental-extensions -fmodules-cache-path=%t \
 // RUN:            -x c++ %s -verify
+// RUN: %clang_cc1 -std=c++20 -fincremental-extensions -fparse-functions-ondemand -fmodules-cache-path=%t \
+// RUN:            -x c++ %s -verify
 // expected-no-diagnostics
 
 #pragma clang module build TopLevelStmt

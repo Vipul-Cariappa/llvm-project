@@ -5,7 +5,9 @@
 // UNSUPPORTED: asan
 
 // RUN: cat %s | clang-repl | FileCheck %s
+// RUN: cat %s | clang-repl -Xcc -fparse-functions-ondemand | FileCheck %s
 // RUN: cat %s | clang-repl -Xcc -O2 | FileCheck %s
+// RUN: cat %s | clang-repl -Xcc -fparse-functions-ondemand -Xcc -O2 | FileCheck %s
 
 extern "C" int printf(const char*, ...);
 

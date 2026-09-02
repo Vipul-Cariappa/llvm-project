@@ -1,5 +1,6 @@
 // REQUIRES: host-supports-jit
 // RUN: cat %s | clang-repl | FileCheck %s
+// RUN: cat %s | clang-repl -Xcc -fparse-functions-ondemand | FileCheck %s
 // virtual functions defined outside of class had duplicate symbols:
 //     duplicate definition of symbol '__ZTV3Two' (i.e., vtable for Two)
 // see https://github.com/llvm/llvm-project/issues/141039.
