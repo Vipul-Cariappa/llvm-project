@@ -3568,6 +3568,10 @@ void Parser::ParseLateRecordDefinition(LateParsedRecord &LPR) {
       LocalDecls.reenter(Actions.getCurScope(), DC);
   }
 
+  // Nor are the function scopes of whatever the parser was in the middle of
+  // the scopes of this body.
+  Sema::FunctionScopesSwapRAII SavedFunctionScopes(Actions);
+
   // The type may first be needed complete inside sizeof, decltype or a
   // noexcept operand. What the body declares belongs to the body, not to that
   // operand, so it is parsed in a potentially-evaluated context of its own.

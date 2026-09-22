@@ -3593,6 +3593,35 @@ public:
     ContextRAII &operator=(const ContextRAII &) = delete;
   };
 
+  /// RAII object that hides the function scopes of whatever the parser was in
+  /// the middle of from a body that is parsed late.
+  ///
+  /// A class body is often first needed complete inside a function, and a
+  /// lambda's in particular: the scope of that lambda is still on the stack,
+  /// and getCurLambda would hand it to the members being parsed as if they
+  /// were written inside it. The bodies, initializers and default arguments in
+  /// the class push scopes of their own.
+  class FunctionScopesSwapRAII {
+    Sema &SemaRef;
+    SmallVector<sema::FunctionScopeInfo *, 4> SavedScopes;
+    unsigned SavedScopesStart;
+
+  public:
+    explicit FunctionScopesSwapRAII(Sema &SemaRef)
+        : SemaRef(SemaRef), SavedScopesStart(SemaRef.FunctionScopesStart) {
+      SavedScopes.swap(SemaRef.FunctionScopes);
+      SemaRef.FunctionScopesStart = 0;
+    }
+
+    ~FunctionScopesSwapRAII() {
+      SemaRef.FunctionScopes.swap(SavedScopes);
+      SemaRef.FunctionScopesStart = SavedScopesStart;
+    }
+
+    FunctionScopesSwapRAII(const FunctionScopesSwapRAII &) = delete;
+    FunctionScopesSwapRAII &operator=(const FunctionScopesSwapRAII &) = delete;
+  };
+
   /// RAII object that puts the declarations of function-local DeclContexts
   /// back on the scope chain.
   ///

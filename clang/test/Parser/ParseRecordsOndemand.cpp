@@ -312,6 +312,34 @@ struct Outer {
 int complete_class_context(Outer o) { return o.line() + o.direct(); }
 } // namespace CompleteClassContext
 
+// A class is often first needed complete inside a function, and inside a
+// lambda in particular. Its members are not being written in that lambda, so
+// the scopes of whatever the parser was in the middle of are put aside for the
+// late parse.
+namespace InsideALambda {
+struct NeededInLambda {
+  int m = 1;
+  int get() { return this->m; }
+};
+
+auto lambda = []() {
+  NeededInLambda n;
+  return n.get();
+};
+
+struct NeededInNestedLambda {
+  int m = 2;
+  int get() { return this->m; }
+};
+
+auto nested = []() {
+  return [](int x) {
+    NeededInNestedLambda n;
+    return n.get() + x;
+  }(1);
+};
+} // namespace InsideALambda
+
 // The template parameter depth of a deferred body is the depth where it was
 // written, not the depth of whatever first asked for the type.
 namespace TemplateDepth {
