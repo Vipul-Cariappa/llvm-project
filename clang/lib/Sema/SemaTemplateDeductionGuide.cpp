@@ -1656,6 +1656,10 @@ void Sema::DeclareImplicitDeductionGuides(TemplateDecl *Template,
       dyn_cast_or_null<CXXRecordDecl>(Template->getTemplatedDecl());
   if (!DefRecord)
     return;
+  // With -fparse-records-ondemand the constructors the implicit guides are
+  // built from may not have been parsed yet.
+  if (getLangOpts().ParseRecordsOnDemand)
+    ParseLateRecordDefinition(DefRecord);
   if (const CXXRecordDecl *Definition = DefRecord->getDefinition()) {
     if (TemplateDecl *DescribedTemplate =
             Definition->getDescribedClassTemplate())

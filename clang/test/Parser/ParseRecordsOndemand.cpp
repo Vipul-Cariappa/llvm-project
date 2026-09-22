@@ -1,4 +1,5 @@
 // RUN: %clang_cc1 -fincremental-extensions -fparse-records-ondemand -fsyntax-only -verify -Wall -Wextra -Werror -ferror-limit 0 -std=c++11 %s
+// RUN: %clang_cc1 -fincremental-extensions -fparse-records-ondemand -fsyntax-only -verify -Wall -Wextra -Werror -ferror-limit 0 -std=c++17 %s
 
 // With -fparse-records-ondemand the member-specification of a namespace-scope
 // class is consumed but not parsed. The class stays a forward declaration until
@@ -274,7 +275,42 @@ int out_of_line(OutOfLine<int> o) { return o.f() + OutOfLine<int>::s; }
 // A second definition of a template is still a redefinition.
 template <typename T> struct Redefined { int a; }; // expected-note {{previous definition is here}}
 template <typename T> struct Redefined { int b; }; // expected-error {{redefinition of 'Redefined'}}
+
+// The body names a specialization of its own template, so the body has to be
+// parsed before the instantiation that wanted it starts -- otherwise the
+// recursion guard turns the nested use into an incomplete type.
+template <int N> struct SelfInstantiating {
+  void f() { SelfInstantiating<1> s; (void)s; }
+};
+void self_instantiating(SelfInstantiating<1> s) { s.f(); }
+
+#if __cplusplus >= 201703L
+// Class template argument deduction builds its implicit guides from the
+// constructors, so the body has to be parsed before the guides are formed.
+template <typename T> struct Deduced {
+  Deduced(T);
+  T value;
+};
+void deduction() {
+  Deduced d(1);
+  (void)d.value;
+}
+#endif
 } // namespace ClassTemplates
+
+// A member of a class is subject to the complete-class rule, not to source
+// order: a body, a default argument or an initializer in a class sees every
+// member of it, and of the classes nested in it.
+namespace CompleteClassContext {
+struct Outer {
+  int line() const { return impl->value; }
+  int direct() const { return later; }
+  struct Impl { int value; };
+  const Impl *impl;
+  int later;
+};
+int complete_class_context(Outer o) { return o.line() + o.direct(); }
+} // namespace CompleteClassContext
 
 // The template parameter depth of a deferred body is the depth where it was
 // written, not the depth of whatever first asked for the type.

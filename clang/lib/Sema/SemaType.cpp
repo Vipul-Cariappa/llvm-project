@@ -9748,9 +9748,20 @@ bool Sema::RequireCompleteTypeImpl(SourceLocation Loc, QualType T,
 
     // With -fparse-records-ondemand a class whose member-specification has not
     // been parsed yet is incomplete only because we have not got around to it.
-    if (Tag && getLangOpts().ParseRecordsOnDemand &&
-        ParseLateRecordDefinition(Tag) && !T->isIncompleteType())
-      return RequireCompleteTypeImpl(Loc, T, Kind, Diagnoser);
+    // For a specialization that means the body of the template it will be
+    // instantiated from, which has to be parsed before the instantiation
+    // starts: the body can name this very specialization -- `template <int N>
+    // struct S { void f() { S<1> s; } };` -- and the recursion guard would
+    // turn that into an incomplete type.
+    if (Tag && getLangOpts().ParseRecordsOnDemand) {
+      ParseLateRecordDefinition(Tag);
+      if (auto *Spec = dyn_cast<ClassTemplateSpecializationDecl>(Tag))
+        for (ClassTemplateDecl *CTD = Spec->getSpecializedTemplate(); CTD;
+             CTD = CTD->getInstantiatedFromMemberTemplate())
+          ParseLateRecordDefinition(CTD->getTemplatedDecl());
+      if (!T->isIncompleteType())
+        return RequireCompleteTypeImpl(Loc, T, Kind, Diagnoser);
+    }
 
     // Give the external AST source a chance to complete the type.
     if (auto *Source = Context.getExternalSource()) {

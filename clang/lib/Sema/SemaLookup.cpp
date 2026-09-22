@@ -1166,6 +1166,14 @@ static bool IsVisibleAtLateParsedLookupPoint(Sema &S, SourceLocation LookupLoc,
       CXXMD && isLambdaCallOperator(CXXMD))
     return true;
 
+  // Source order governs names at namespace and block scope. A member of a
+  // class is subject to the complete-class rule instead -- the bodies, default
+  // arguments and initializers in a class see every member of it -- and while
+  // a member-specification is still being parsed, a member written below the
+  // one naming it does not exist yet anyway.
+  if (D->getLexicalDeclContext()->isRecord())
+    return true;
+
   // What is being parsed late right now, and which class body it sits in. The
   // member-specification of a deferred class is in the same position as a
   // deferred function body: the tokens carry their original locations, so
@@ -1198,12 +1206,6 @@ static bool IsVisibleAtLateParsedLookupPoint(Sema &S, SourceLocation LookupLoc,
        RD; RD = isa_and_nonnull<RecordDecl>(RD->getParent())
                     ? dyn_cast<RecordDecl>(RD->getParent())->getDefinition()
                     : nullptr) {
-    // A member of the class is visible throughout it whatever the order. That
-    // has to be spelled out rather than left to the end location below: while
-    // the member-specification is still being parsed the class has no closing
-    // brace yet, and getEndLoc() falls back to the name.
-    if (D->getLexicalDeclContext()->getRedeclContext()->Equals(RD))
-      return true;
     if (RD->getEndLoc().isInvalid() ||
         S.getSourceManager().isBeforeInTranslationUnit(DeclLoc,
                                                        RD->getEndLoc()))
