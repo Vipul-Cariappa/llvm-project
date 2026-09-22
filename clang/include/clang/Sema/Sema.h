@@ -15998,6 +15998,8 @@ struct LateParsedRecord {
   SourceLocation RecordLoc;
   /// Where a misplaced attribute should be moved to, for its fix-it.
   SourceLocation AttrFixitLoc;
+  /// Floating-point options at the point of definition.
+  FPOptions FPO;
 };
 
 template <>

@@ -3574,6 +3574,12 @@ void Parser::ParseLateRecordDefinition(LateParsedRecord &LPR) {
   EnterExpressionEvaluationContext EvalContext(
       Actions, Sema::ExpressionEvaluationContext::PotentiallyEvaluated);
 
+  // Likewise the floating-point pragma state: what the body computes is
+  // governed by the pragmas in effect where it was written, not by the ones in
+  // effect where the type was first needed.
+  Sema::FpPragmaStackSaveRAII SavedFpStack(Actions);
+  Actions.resetFPOptions(LPR.FPO);
+
   // A type is often first needed complete in the middle of a tentative parse,
   // where anything entered into the token stream would be replayed by the
   // Backtrack() that follows. This stream is read to its end right here, so

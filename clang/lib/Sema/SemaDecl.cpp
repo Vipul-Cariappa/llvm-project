@@ -19170,6 +19170,7 @@ void Sema::MarkAsLateParsedRecord(Decl *TagD, unsigned TagType,
   LPR->TagType = TagType;
   LPR->RecordLoc = RecordLoc;
   LPR->AttrFixitLoc = AttrFixitLoc;
+  LPR->FPO = getCurFPFeatures();
   LateParsedRecordMap.insert(
       std::make_pair(LPR->TD->getCanonicalDecl(), std::move(LPR)));
 }
