@@ -3576,6 +3576,13 @@ defm parse_functions_ondemand : BoolFOption<"parse-functions-ondemand",
           "(requires -fincremental-extensions)">,
   NegFlag<SetFalse, [], [], "Disable on-demand function parsing">,
   BothFlags<[], [ClangOption, CLOption]>>;
+defm parse_records_ondemand : BoolFOption<"parse-records-ondemand",
+  LangOpts<"ParseRecordsOnDemand">, DefaultFalse,
+  PosFlag<SetTrue, [], [ClangOption, CC1Option],
+          "Parse class, struct and union bodies on demand, when the type is "
+          "first required to be complete (requires -fincremental-extensions)">,
+  NegFlag<SetFalse, [], [], "Disable on-demand record parsing">,
+  BothFlags<[], [ClangOption, CLOption]>>;
 def fms_memptr_rep_EQ : Joined<["-"], "fms-memptr-rep=">, Group<f_Group>,
   Visibility<[ClangOption, CC1Option]>,
   Values<"single,multiple,virtual">, NormalizedValuesScope<"LangOptions">,

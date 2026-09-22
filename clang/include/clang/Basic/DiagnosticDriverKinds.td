@@ -755,13 +755,13 @@ def warn_drv_fine_grained_bitfield_accesses_ignored : Warning<
   "option '-ffine-grained-bitfield-accesses' cannot be enabled together with a sanitizer; flag ignored">,
   InGroup<OptionIgnored>;
 
-def warn_drv_parse_functions_ondemand_ignored : Warning<
-  "option '-fparse-functions-ondemand' is not supported when generating a "
-  "%select{precompiled header|module}0; flag ignored">,
+def warn_drv_parse_ondemand_ignored : Warning<
+  "option '%0' is not supported when generating a "
+  "%select{precompiled header|module}1; flag ignored">,
   InGroup<OptionIgnored>;
 
-def warn_drv_parse_functions_ondemand_not_incremental : Warning<
-  "option '-fparse-functions-ondemand' is only supported with "
+def warn_drv_parse_ondemand_not_incremental : Warning<
+  "option '%0' is only supported with "
   "'-fincremental-extensions'; flag ignored">,
   InGroup<OptionIgnored>;
 

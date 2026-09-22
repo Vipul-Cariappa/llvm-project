@@ -4132,14 +4132,20 @@ bool CompilerInvocation::ParseLangArgs(LangOptions &Opts, ArgList &Args,
     Diags.Report(diag::err_drv_argument_not_allowed_with)
         << "-fparse-functions-ondemand" << "-fdelayed-template-parsing";
 
-  // On-demand parsing leaves the bodies of unused functions unparsed, so the
-  // functions are never emitted. That is only safe when nothing outside of
-  // this translation unit can refer to them, i.e. in incremental processing
-  // mode (clang-repl), where each fragment is compiled and executed as it is
-  // parsed.
+  // On-demand parsing leaves the bodies of unused functions and of unused
+  // records unparsed, so they are never emitted. That is only safe when
+  // nothing outside of this translation unit can refer to them, i.e. in
+  // incremental processing mode (clang-repl), where each fragment is compiled
+  // and executed as it is parsed.
   if (Opts.ParseFunctionsOnDemand && !Opts.IncrementalExtensions) {
     Opts.ParseFunctionsOnDemand = false;
-    Diags.Report(diag::warn_drv_parse_functions_ondemand_not_incremental);
+    Diags.Report(diag::warn_drv_parse_ondemand_not_incremental)
+        << "-fparse-functions-ondemand";
+  }
+  if (Opts.ParseRecordsOnDemand && !Opts.IncrementalExtensions) {
+    Opts.ParseRecordsOnDemand = false;
+    Diags.Report(diag::warn_drv_parse_ondemand_not_incremental)
+        << "-fparse-records-ondemand";
   }
 
   // "Modules semantics" (e.g. cross-translation-unit declaration merging) are
@@ -5131,23 +5137,32 @@ bool CompilerInvocation::CreateFromArgsImpl(
   if (Res.getFrontendOpts().ProgramAction == frontend::RewriteObjC)
     LangOpts.ObjCExceptions = 1;
 
-  if (LangOpts.ParseFunctionsOnDemand) {
+  // A deferred body is not serializable, so neither on-demand mode survives
+  // being written to an AST file.
+  if (LangOpts.ParseFunctionsOnDemand || LangOpts.ParseRecordsOnDemand) {
+    std::optional<unsigned> IgnoredFor;
     switch (Res.getFrontendOpts().ProgramAction) {
     case frontend::GeneratePCH:
-      LangOpts.ParseFunctionsOnDemand = false;
-      Diags.Report(diag::warn_drv_parse_functions_ondemand_ignored)
-          << /*precompiled header*/ 0;
+      IgnoredFor = /*precompiled header*/ 0;
       break;
     case frontend::GenerateModule:
     case frontend::GenerateModuleInterface:
     case frontend::GenerateReducedModuleInterface:
     case frontend::GenerateHeaderUnit:
-      LangOpts.ParseFunctionsOnDemand = false;
-      Diags.Report(diag::warn_drv_parse_functions_ondemand_ignored)
-          << /*module*/ 1;
+      IgnoredFor = /*module*/ 1;
       break;
     default:
       break;
+    }
+    if (IgnoredFor) {
+      if (LangOpts.ParseFunctionsOnDemand)
+        Diags.Report(diag::warn_drv_parse_ondemand_ignored)
+            << "-fparse-functions-ondemand" << *IgnoredFor;
+      if (LangOpts.ParseRecordsOnDemand)
+        Diags.Report(diag::warn_drv_parse_ondemand_ignored)
+            << "-fparse-records-ondemand" << *IgnoredFor;
+      LangOpts.ParseFunctionsOnDemand = false;
+      LangOpts.ParseRecordsOnDemand = false;
     }
   }
 

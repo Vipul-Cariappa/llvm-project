@@ -341,6 +341,7 @@ LANGOPT(IncludeDefaultHeader, 1, 0, NotCompatible, "Include default header file 
 LANGOPT(DeclareOpenCLBuiltins, 1, 0, NotCompatible, "Declare OpenCL builtin functions")
 LANGOPT(DelayedTemplateParsing , 1, 0, Benign, "delayed template parsing")
 LANGOPT(ParseFunctionsOnDemand , 1, 0, Benign, "on-demand function parsing")
+LANGOPT(ParseRecordsOnDemand , 1, 0, Benign, "on-demand record parsing")
 LANGOPT(BlocksRuntimeOptional , 1, 0, NotCompatible, "optional blocks runtime")
 LANGOPT(
     CompleteMemberPointers, 1, 0, NotCompatible,

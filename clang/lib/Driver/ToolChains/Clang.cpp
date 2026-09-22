@@ -7818,6 +7818,10 @@ void Clang::ConstructJob(Compilation &C, const JobAction &JA,
                    options::OPT_fno_parse_functions_ondemand, false))
     CmdArgs.push_back("-fparse-functions-ondemand");
 
+  if (Args.hasFlag(options::OPT_fparse_records_ondemand,
+                   options::OPT_fno_parse_records_ondemand, false))
+    CmdArgs.push_back("-fparse-records-ondemand");
+
   if (Args.hasFlag(options::OPT_fpch_validate_input_files_content,
                    options::OPT_fno_pch_validate_input_files_content, false))
     CmdArgs.push_back("-fvalidate-ast-input-files-content");
