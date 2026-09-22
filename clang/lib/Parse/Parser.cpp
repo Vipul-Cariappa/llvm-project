@@ -1283,8 +1283,7 @@ Decl *Parser::ParseFunctionDefinition(ParsingDeclarator &D,
   if (Tok.isNot(tok::equal) && LateParsedAttrs->empty() &&
       (IsDelayedTemplateFunction || ShouldParseOnDemand)) {
     FunctionDecl *FnD = FuncDecl ? FuncDecl->getAsFunction() : nullptr;
-    bool ShouldDelayFunction = FnD && !FnD->isUsed(/*CheckUsedAttr=*/true) &&
-                               FnD->isDefinedOutsideFunctionOrMethod();
+    bool ShouldDelayFunction = FnD && !FnD->isUsed(/*CheckUsedAttr=*/true);
     if (ShouldDelayFunction) {
       if (SkipFunctionBodies &&
           (!FuncDecl || Actions.canSkipFunctionBody(FuncDecl)) &&
