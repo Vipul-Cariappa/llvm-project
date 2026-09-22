@@ -48,6 +48,23 @@ DeclContext *Sema::computeDeclContext(QualType T) {
 
 DeclContext *Sema::computeDeclContext(const CXXScopeSpec &SS,
                                       bool EnteringContext) {
+  DeclContext *DC = computeDeclContextImpl(SS, EnteringContext);
+
+  // With -fparse-records-ondemand the class a nested-name-specifier names may
+  // still have its member-specification sitting in the token cache, and
+  // looking a name up in it needs the members. Callers reach for
+  // RequireCompleteDeclContext to get them, but skip it when the context is
+  // dependent -- a member of the current instantiation -- so ask here, where
+  // every path that resolves a scope specifier comes through.
+  if (DC && getLangOpts().ParseRecordsOnDemand)
+    if (auto *TD = dyn_cast<TagDecl>(DC))
+      ParseLateRecordDefinition(TD);
+
+  return DC;
+}
+
+DeclContext *Sema::computeDeclContextImpl(const CXXScopeSpec &SS,
+                                          bool EnteringContext) {
   NestedNameSpecifier NNS = SS.getScopeRep();
   if (!NNS.isDependent()) {
     switch (NNS.getKind()) {

@@ -3577,6 +3577,13 @@ bool Sema::InstantiateClassImpl(
     CXXRecordDecl *Pattern, const MultiLevelTemplateArgumentList &TemplateArgs,
     TemplateSpecializationKind TSK, bool Complain) {
 
+  // With -fparse-records-ondemand the pattern's member-specification may still
+  // be sitting in the token cache; this is the point where it is needed. Done
+  // before the InstantiatingTemplate below so that what is diagnosed in the
+  // pattern is not reported as part of this instantiation.
+  if (getLangOpts().ParseRecordsOnDemand)
+    ParseLateRecordDefinition(Pattern);
+
   CXXRecordDecl *PatternDef
     = cast_or_null<CXXRecordDecl>(Pattern->getDefinition());
   if (DiagnoseUninstantiableTemplate(PointOfInstantiation, Instantiation,

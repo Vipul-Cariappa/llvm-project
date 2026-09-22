@@ -30,6 +30,7 @@
 #include "clang/Sema/SemaCodeCompletion.h"
 #include "clang/Sema/SemaHLSL.h"
 #include "llvm/ADT/ScopeExit.h"
+#include "llvm/Support/SaveAndRestore.h"
 #include "llvm/Support/TimeProfiler.h"
 #include <optional>
 
@@ -2141,12 +2142,15 @@ void Parser::ParseClassSpecifier(tok::TokenKind TagTokKind,
     stripTypeAttributesOffDeclSpec(attrs, DS, TUK);
 
     // The whole definition, base-clause included, is cached as tokens, so we
-    // have to know where its '{' is before handing it to ActOnTag. A template
-    // is not deferred: the late parse does not restore parameter scopes.
-    SkipBody.CanDefer =
-        getLangOpts().ParseRecordsOnDemand && getLangOpts().CPlusPlus &&
-        TUK == TagUseKind::Definition && Name && !SS.isSet() &&
-        TParams.empty() && findDeferrableClassBodyStart(DeferredBraceLoc);
+    // have to know where its '{' is before handing it to ActOnTag. A primary
+    // class template is deferred like any other class; a specialization is
+    // built elsewhere and never reaches this point with template parameters.
+    SkipBody.CanDefer = getLangOpts().ParseRecordsOnDemand &&
+                        getLangOpts().CPlusPlus &&
+                        TUK == TagUseKind::Definition && Name && !SS.isSet() &&
+                        (TParams.empty() ||
+                         TemplateInfo.Kind == ParsedTemplateKind::Template) &&
+                        findDeferrableClassBodyStart(DeferredBraceLoc);
 
     // Declaration or definition of a class type
     TagOrTempResult = Actions.ActOnTag(
@@ -3506,8 +3510,7 @@ void Parser::DeferCXXMemberSpecification(SourceLocation StartLoc,
                          /*ConsumeFinalToken=*/true);
   }
 
-  Actions.MarkAsLateParsedRecord(cast<TagDecl>(TagD), TagType, StartLoc,
-                                 AttrFixitLoc, Toks);
+  Actions.MarkAsLateParsedRecord(TagD, TagType, StartLoc, AttrFixitLoc, Toks);
 }
 
 void Parser::LateRecordParserCallback(void *P, LateParsedRecord &LPR) {
@@ -3520,6 +3523,12 @@ void Parser::ParseLateRecordDefinition(LateParsedRecord &LPR) {
 
   // Destroy TemplateIdAnnotations when we're done, if possible.
   DestroyTemplateIdAnnotationsRAIIObj CleanupRAII(*this);
+
+  // Track template parameter depth. The late parse starts again from the
+  // translation unit, so it starts at zero however deep in templates the parse
+  // that asked for the type happened to be.
+  llvm::SaveAndRestore<unsigned> SavedTemplateDepth(TemplateParameterDepth, 0);
+  TemplateParameterDepthRAII CurTemplateDepthTracker(TemplateParameterDepth);
 
   // To restore the context after late parsing.
   Sema::ContextRAII GlobalSavedContext(
@@ -3537,17 +3546,23 @@ void Parser::ParseLateRecordDefinition(LateParsedRecord &LPR) {
 
   MultiParseScope Scopes(*this);
 
-  // Get the list of DeclContexts to reenter.
+  // Get the list of DeclContexts to reenter. The tag itself is on the list so
+  // that its own template parameters come back into scope; its DeclContext is
+  // pushed by ParseCXXMemberSpecification below.
   SmallVector<DeclContext *, 4> DeclContextsToReenter;
-  for (DeclContext *DC = TD->getLexicalDeclContext();
-       DC && !DC->isTranslationUnit(); DC = DC->getLexicalParent())
+  for (DeclContext *DC = TD; DC && !DC->isTranslationUnit();
+       DC = DC->getLexicalParent())
     DeclContextsToReenter.push_back(DC);
 
   Sema::LocalDeclsReentryRAII LocalDecls(Actions);
 
   // Reenter scopes from outermost to innermost.
   for (DeclContext *DC : reverse(DeclContextsToReenter)) {
+    CurTemplateDepthTracker.addDepth(
+        ReenterTemplateScopes(Scopes, cast<Decl>(DC)));
     Scopes.Enter(Scope::DeclScope);
+    if (DC == TD)
+      continue;
     Actions.PushDeclContext(Actions.getCurScope(), DC);
     if (DC->isFunctionOrMethod())
       LocalDecls.reenter(Actions.getCurScope(), DC);
@@ -3579,7 +3594,7 @@ void Parser::ParseLateRecordDefinition(LateParsedRecord &LPR) {
 
   ParsedAttributes Attrs(AttrFactory);
   ParseCXXMemberSpecification(LPR.RecordLoc, LPR.AttrFixitLoc, Attrs,
-                              LPR.TagType, TD);
+                              LPR.TagType, LPR.TagD);
 }
 
 Parser::DeclGroupPtrTy Parser::ParseCXXClassMemberDeclarationWithPragmas(

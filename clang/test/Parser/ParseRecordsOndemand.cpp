@@ -207,16 +207,106 @@ struct NeverCompleted : Base {
 NeverCompleted *never_completed;
 } // namespace WithBaseClause
 
+// A primary class template is deferred as well; its body is parsed when the
+// template is first instantiated, with its parameter scopes back in place.
+namespace ClassTemplates {
+template <typename T> struct Box { T v; T get() const { return v; } };
+int instantiated(Box<int> b) { return b.get(); }
+
+// Never instantiated, so the body is never parsed and the errors in it are
+// never diagnosed.
+template <typename T> struct NeverInstantiated {
+  undeclared_type_in_template_body member;
+  T t;
+};
+NeverInstantiated<int> *never_instantiated;
+
+// One body, two instantiations.
+template <typename T> struct Twice { T v; };
+int twice(Twice<int> a, Twice<char> b) { return a.v + b.v; }
+
+// A default template argument and a non-type parameter.
+template <typename T, int N = 4> struct Array {
+  T data[N];
+  int size() const { return N; }
+};
+int array_size(Array<int> a) { return a.size(); }
+
+// The base-clause names the template parameter, so it has to be parsed with the
+// parameter scopes restored.
+template <typename T> struct TemplateBase { T b; };
+template <typename T> struct TemplateDerived : TemplateBase<T> { T d; };
+int derived(TemplateDerived<int> d) { return d.d; }
+
+// A member template of a deferred template is parsed with it.
+template <typename T> struct WithMemberTemplate {
+  template <typename U> struct Inner { U u; };
+  Inner<int> i;
+};
+int member_template(WithMemberTemplate<char> w) { return w.i.u; }
+
+// An explicit specialization does not need the primary's body, and the primary
+// is still deferred for the other arguments.
+template <typename T> struct Specialized { int which() { return 1; } };
+template <> struct Specialized<int> { int which() { return 2; } };
+int specialized() { return Specialized<char>().which() + Specialized<int>().which(); }
+
+// A partial specialization, likewise.
+template <typename T> struct Partial { int which() { return 1; } };
+template <typename T> struct Partial<T *> { int which() { return 2; } };
+int partial() { return Partial<char>().which() + Partial<char *>().which(); }
+
+// An explicit instantiation parses the body too.
+template <typename T> struct Explicit { T t; };
+template struct Explicit<int>;
+
+// An out-of-line member definition names the pattern through a dependent
+// nested-name-specifier, which does not go through RequireCompleteDeclContext.
+template <typename T> struct OutOfLine {
+  T f();
+  static int s;
+  typedef T Alias;
+};
+template <typename T> T OutOfLine<T>::f() { return T(); }
+template <typename T> int OutOfLine<T>::s = 0;
+int out_of_line(OutOfLine<int> o) { return o.f() + OutOfLine<int>::s; }
+
+// A second definition of a template is still a redefinition.
+template <typename T> struct Redefined { int a; }; // expected-note {{previous definition is here}}
+template <typename T> struct Redefined { int b; }; // expected-error {{redefinition of 'Redefined'}}
+} // namespace ClassTemplates
+
+// The template parameter depth of a deferred body is the depth where it was
+// written, not the depth of whatever first asked for the type.
+namespace TemplateDepth {
+typedef unsigned long size_t;
+
+struct Selector {
+  template <typename...> struct List { };
+  template <typename T, typename... U> struct List<T, U...> : List<U...> {
+    static const size_t size = sizeof(T);
+  };
+  typedef List<unsigned char, unsigned short> UInts;
+
+  template <size_t Sz, typename T, bool = (Sz <= T::size)> struct Pick;
+  template <size_t Sz, typename U, typename... Us>
+  struct Pick<Sz, List<U, Us...>, true> { typedef U type; };
+  template <size_t Sz, typename U, typename... Us>
+  struct Pick<Sz, List<U, Us...>, false> : Pick<Sz, List<Us...> > { };
+};
+
+// Reached from inside a template, so the enclosing depth is not zero.
+template <typename T> struct Uses : Selector {
+  typedef typename Pick<sizeof(T), UInts>::type type;
+};
+Uses<char>::type template_depth = 0;
+} // namespace TemplateDepth
+
 // Forms that are not deferred are parsed as they always were.
 namespace NotDeferred {
 // An unnamed class has no name to look up, so it cannot be deferred.
 typedef struct { int t; } Unnamed;
 Unnamed unnamed;
-
-// A class template needs its parameter scopes back, which the deferred parse
-// does not restore.
-template <typename T> struct Template { T value; };
-Template<int> instantiated;
 
 // A member class is parsed with its enclosing class.
 struct Enclosing {

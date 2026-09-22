@@ -2162,6 +2162,10 @@ DeclResult Sema::CheckClassTemplate(
 
     // Check for redefinition of this class template.
     if (TUK == TagUseKind::Definition) {
+      // A template whose member-specification has not been parsed yet looks
+      // like a forward declaration, so parse it before comparing.
+      if (getLangOpts().ParseRecordsOnDemand)
+        ParseLateRecordDefinition(PrevRecordDecl);
       if (TagDecl *Def = PrevRecordDecl->getDefinition()) {
         // If we have a prior definition that is not visible, treat this as
         // simply making that previous definition visible.
@@ -2283,8 +2287,15 @@ DeclResult Sema::CheckClassTemplate(
   NewClass->setLexicalDeclContext(CurContext);
   NewTemplate->setLexicalDeclContext(CurContext);
 
-  if (TUK == TagUseKind::Definition && (!SkipBody || !SkipBody->ShouldSkip))
-    NewClass->startDefinition();
+  if (TUK == TagUseKind::Definition && (!SkipBody || !SkipBody->ShouldSkip)) {
+    if (shouldDeferTagDefinition(NewClass, SemanticContext, Invalid, SkipBody))
+      // Leave the pattern a forward declaration. The parser caches the
+      // member-specification and hands it back when the template is first
+      // instantiated.
+      SkipBody->ShouldDefer = true;
+    else
+      NewClass->startDefinition();
+  }
 
   ProcessDeclAttributeList(S, NewClass, Attr);
 

@@ -3298,6 +3298,12 @@ public:
   /// dependent and not the current instantiation).
   DeclContext *computeDeclContext(const CXXScopeSpec &SS,
                                   bool EnteringContext = false);
+
+private:
+  DeclContext *computeDeclContextImpl(const CXXScopeSpec &SS,
+                                      bool EnteringContext);
+
+public:
   bool isDependentScopeSpecifier(const CXXScopeSpec &SS);
 
   /// If the given nested name specifier refers to the current
@@ -11556,11 +11562,17 @@ public:
       LateParsedRecordMapT;
   LateParsedRecordMapT LateParsedRecordMap;
 
-  /// Stash away the member-specification of \p TD, to be parsed the first time
-  /// the type has to be complete.
-  void MarkAsLateParsedRecord(TagDecl *TD, unsigned TagType,
+  /// Stash away the member-specification of \p TagD, to be parsed the first
+  /// time the type has to be complete. \p TagD is the tag, or the class
+  /// template it is the pattern of.
+  void MarkAsLateParsedRecord(Decl *TagD, unsigned TagType,
                               SourceLocation RecordLoc,
                               SourceLocation AttrFixitLoc, CachedTokens &Toks);
+
+  /// Whether the member-specification of \p New can be left unparsed until
+  /// something first requires the type to be complete.
+  bool shouldDeferTagDefinition(TagDecl *New, DeclContext *SemanticContext,
+                                bool Invalid, SkipBodyInfo *SkipBody);
 
   /// Whether \p TD has a member-specification that has not been parsed yet.
   bool isLateParsedRecord(const TagDecl *TD) const;
@@ -15975,7 +15987,10 @@ struct LateParsedTemplate {
 struct LateParsedRecord {
   /// The '{' through the '}', plus any attributes that followed it.
   CachedTokens Toks;
-  /// The tag these tokens define.
+  /// What the parser was handed for this definition: the tag, or the class
+  /// template it is the pattern of.
+  Decl *TagD;
+  /// The tag these tokens define, which is what the rest of Sema asks about.
   TagDecl *TD;
   /// The DeclSpec::TST_* the tag was introduced with.
   unsigned TagType;

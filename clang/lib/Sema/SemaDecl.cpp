@@ -6550,6 +6550,14 @@ NamedDecl *Sema::HandleDeclarator(Scope *S, Declarator &D,
         << D.getCXXScopeSpec().getRange();
       return nullptr;
     }
+    // An out-of-line definition needs the members of the class it names. When
+    // that class is the current instantiation the context is dependent, and
+    // RequireCompleteDeclContext below is skipped, so ask for a deferred
+    // member-specification here.
+    if (getLangOpts().ParseRecordsOnDemand)
+      if (auto *TD = dyn_cast<TagDecl>(DC))
+        ParseLateRecordDefinition(TD);
+
     bool IsDependentContext = DC->isDependentContext();
 
     if (!IsDependentContext &&
@@ -18030,10 +18038,8 @@ static bool isAcceptableTagRedeclContext(Sema &S, DeclContext *OldDC,
   return false;
 }
 
-/// Whether the member-specification of \p New can be left unparsed until
-/// something first requires the type to be complete.
-static bool shouldDeferTagDefinition(TagDecl *New, DeclContext *SearchDC,
-                                     bool Invalid, SkipBodyInfo *SkipBody) {
+bool Sema::shouldDeferTagDefinition(TagDecl *New, DeclContext *SemanticContext,
+                                    bool Invalid, SkipBodyInfo *SkipBody) {
   if (!SkipBody || !SkipBody->CanDefer || Invalid || New->isInvalidDecl())
     return false;
 
@@ -18045,7 +18051,7 @@ static bool shouldDeferTagDefinition(TagDecl *New, DeclContext *SearchDC,
 
   // A member or a local class is parsed with the context it was written in, so
   // only namespace-scope classes are deferred.
-  return SearchDC->getRedeclContext()->isFileContext();
+  return SemanticContext->getRedeclContext()->isFileContext();
 }
 
 DeclResult
@@ -19150,18 +19156,22 @@ CreateNewDecl:
   }
 }
 
-void Sema::MarkAsLateParsedRecord(TagDecl *TD, unsigned TagType,
+void Sema::MarkAsLateParsedRecord(Decl *TagD, unsigned TagType,
                                   SourceLocation RecordLoc,
                                   SourceLocation AttrFixitLoc,
                                   CachedTokens &Toks) {
+  Decl *TemplatedD = TagD;
+  AdjustDeclIfTemplate(TemplatedD);
+
   auto LPR = std::make_unique<LateParsedRecord>();
   LPR->Toks.swap(Toks);
-  LPR->TD = TD;
+  LPR->TagD = TagD;
+  LPR->TD = cast<TagDecl>(TemplatedD);
   LPR->TagType = TagType;
   LPR->RecordLoc = RecordLoc;
   LPR->AttrFixitLoc = AttrFixitLoc;
   LateParsedRecordMap.insert(
-      std::make_pair(TD->getCanonicalDecl(), std::move(LPR)));
+      std::make_pair(LPR->TD->getCanonicalDecl(), std::move(LPR)));
 }
 
 bool Sema::isLateParsedRecord(const TagDecl *TD) const {
