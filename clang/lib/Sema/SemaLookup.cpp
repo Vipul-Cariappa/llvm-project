@@ -1128,7 +1128,8 @@ static void DeclareImplicitMemberFunctionsWithName(Sema &S,
 
 static bool IsVisibleAtLateParsedLookupPoint(Sema &S, SourceLocation LookupLoc,
                                              NamedDecl *D) {
-  if (!S.getLangOpts().ParseFunctionsOnDemand)
+  if (!S.getLangOpts().ParseFunctionsOnDemand &&
+      !S.getLangOpts().ParseRecordsOnDemand)
     return true;
 
   if (D->isImplicit())
@@ -1165,9 +1166,22 @@ static bool IsVisibleAtLateParsedLookupPoint(Sema &S, SourceLocation LookupLoc,
       CXXMD && isLambdaCallOperator(CXXMD))
     return true;
 
+  // What is being parsed late right now, and which class body it sits in. The
+  // member-specification of a deferred class is in the same position as a
+  // deferred function body: the tokens carry their original locations, so
+  // source order still decides what the names in it can see.
+  const CXXRecordDecl *EnclosingRD = nullptr;
   auto *FD = dyn_cast_or_null<FunctionDecl>(S.CurContext);
-  if (!FD || !FD->isLateTemplateParsed())
+  if (FD && FD->isLateTemplateParsed()) {
+    if (auto *CXXMD = dyn_cast<CXXMethodDecl>(FD))
+      EnclosingRD = CXXMD->getParent();
+    else if (FD->getFriendObjectKind() != Decl::FriendObjectKind::FOK_None)
+      EnclosingRD = dyn_cast<CXXRecordDecl>(FD->getLexicalDeclContext());
+  } else if (const CXXRecordDecl *LateRD = S.getEnclosingLateParsedRecord()) {
+    EnclosingRD = LateRD;
+  } else {
     return true;
+  }
 
   SourceLocation DeclLoc = D->getCanonicalDecl()->getLocation();
 
@@ -1179,17 +1193,17 @@ static bool IsVisibleAtLateParsedLookupPoint(Sema &S, SourceLocation LookupLoc,
       S.getSourceManager().isBeforeInTranslationUnit(DeclLoc, LookupLoc))
     return true;
 
-  const CXXRecordDecl *EnclosingRD = nullptr;
-  if (auto *CXXMD = dyn_cast<CXXMethodDecl>(FD))
-    EnclosingRD = CXXMD->getParent();
-  else if (FD->getFriendObjectKind() != Decl::FriendObjectKind::FOK_None)
-    EnclosingRD = dyn_cast<CXXRecordDecl>(FD->getLexicalDeclContext());
-
   for (auto *RD = dyn_cast_or_null<RecordDecl>(
            EnclosingRD ? EnclosingRD->getDefinition() : nullptr);
        RD; RD = isa_and_nonnull<RecordDecl>(RD->getParent())
                     ? dyn_cast<RecordDecl>(RD->getParent())->getDefinition()
                     : nullptr) {
+    // A member of the class is visible throughout it whatever the order. That
+    // has to be spelled out rather than left to the end location below: while
+    // the member-specification is still being parsed the class has no closing
+    // brace yet, and getEndLoc() falls back to the name.
+    if (D->getLexicalDeclContext()->getRedeclContext()->Equals(RD))
+      return true;
     if (RD->getEndLoc().isInvalid() ||
         S.getSourceManager().isBeforeInTranslationUnit(DeclLoc,
                                                        RD->getEndLoc()))

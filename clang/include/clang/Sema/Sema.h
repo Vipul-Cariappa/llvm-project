@@ -11564,6 +11564,14 @@ public:
   /// Whether \p TD has a member-specification that has not been parsed yet.
   bool isLateParsedRecord(const TagDecl *TD) const;
 
+  /// The classes whose member-specification is being parsed right now, in the
+  /// order the parses were started.
+  SmallVector<const TagDecl *, 4> LateParsedRecordStack;
+
+  /// The innermost class around CurContext whose member-specification is being
+  /// parsed late, if there is one.
+  const CXXRecordDecl *getEnclosingLateParsedRecord() const;
+
   /// Parse the deferred member-specification of \p TD, if it has one. Returns
   /// true if \p TD has a definition afterwards.
   bool ParseLateRecordDefinition(TagDecl *TD);

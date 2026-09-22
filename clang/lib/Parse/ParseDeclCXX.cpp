@@ -29,6 +29,7 @@
 #include "clang/Sema/Scope.h"
 #include "clang/Sema/SemaCodeCompletion.h"
 #include "clang/Sema/SemaHLSL.h"
+#include "llvm/ADT/ScopeExit.h"
 #include "llvm/Support/TimeProfiler.h"
 #include <optional>
 
@@ -3434,6 +3435,16 @@ void Parser::ParseLateRecordDefinition(LateParsedRecord &LPR) {
   // To restore the context after late parsing.
   Sema::ContextRAII GlobalSavedContext(
       Actions, Actions.Context.getTranslationUnitDecl());
+
+  // The scopes below have to sit directly on the translation unit scope.
+  // Unqualified lookup walks outwards and, once it reaches a namespace scope,
+  // asserts that every scope beyond it is one too; the chain at whatever point
+  // of the parse asked for the type is not.
+  Scope *SavedScope = Actions.CurScope;
+  if (Actions.TUScope)
+    Actions.CurScope = Actions.TUScope;
+  auto RestoreScope =
+      llvm::make_scope_exit([&] { Actions.CurScope = SavedScope; });
 
   MultiParseScope Scopes(*this);
 

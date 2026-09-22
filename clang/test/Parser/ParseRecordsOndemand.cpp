@@ -104,6 +104,35 @@ void use() {
 }
 } // namespace StillIncomplete
 
+// A deferred body is parsed long after the declarations that follow it have
+// been seen, but the cached tokens carry their original locations, so source
+// order still decides what the names in it can see.
+namespace SourceOrder {
+struct Earlier { int x; };
+
+struct SeesPrior {
+  Earlier *prior; // fine, 'Earlier' is declared above
+  int x;
+};
+SeesPrior sees_prior;
+
+struct DoesNotSeeLater {
+  Later *later; // expected-error {{unknown type name 'Later'}}
+  int x;
+};
+DoesNotSeeLater does_not_see_later;
+
+struct Later { int x; };
+
+// A member of the class is found whatever the order, because the body of a
+// member function is a complete-class context.
+struct MemberOrder {
+  int first() { return second(); }
+  int second() { return 1; }
+};
+int member_order(MemberOrder m) { return m.first(); }
+} // namespace SourceOrder
+
 // Forms that are not deferred are parsed as they always were.
 namespace NotDeferred {
 // An unnamed class has no name to look up, so it cannot be deferred.

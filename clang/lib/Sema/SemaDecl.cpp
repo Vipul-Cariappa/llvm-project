@@ -19182,8 +19182,20 @@ bool Sema::ParseLateRecordDefinition(TagDecl *TD) {
   // ActOnTag left the tag a forward declaration while its body waited; it
   // becomes a definition again now that the members are about to be parsed.
   LPR->TD->startDefinition();
+  LateParsedRecordStack.push_back(LPR->TD->getCanonicalDecl());
   LateRecordParser(OpaqueParser, *LPR);
+  LateParsedRecordStack.pop_back();
   return LPR->TD->isCompleteDefinition();
+}
+
+const CXXRecordDecl *Sema::getEnclosingLateParsedRecord() const {
+  if (LateParsedRecordStack.empty())
+    return nullptr;
+  for (const DeclContext *DC = CurContext; DC; DC = DC->getLexicalParent())
+    if (const auto *RD = dyn_cast<CXXRecordDecl>(DC))
+      if (llvm::is_contained(LateParsedRecordStack, RD->getCanonicalDecl()))
+        return RD;
+  return nullptr;
 }
 
 void Sema::ActOnTagStartDefinition(Scope *S, Decl *TagD) {
