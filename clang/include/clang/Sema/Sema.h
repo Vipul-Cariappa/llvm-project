@@ -3570,6 +3570,35 @@ public:
     ContextRAII &operator=(const ContextRAII &) = delete;
   };
 
+  /// RAII object that puts the declarations of function-local DeclContexts
+  /// back on the scope chain.
+  ///
+  /// Unqualified lookup finds function-local declarations through the scope
+  /// chain rather than through DeclContext lookup, so a body that is parsed
+  /// late -- a member of a local class, say -- can no longer see them: the
+  /// scopes of the enclosing function are long gone by then. Re-entering the
+  /// DeclContexts is not enough; the names have to be made visible again one
+  /// by one.
+  ///
+  /// The declarations are only added to the scope and to the identifier
+  /// resolver, not to any DeclContext, and they are removed again before the
+  /// scope itself is popped. That keeps ActOnPopScope from repeating the
+  /// diagnostics it already emitted when the enclosing function was parsed.
+  class LocalDeclsReentryRAII {
+    Sema &SemaRef;
+    SmallVector<std::pair<Scope *, NamedDecl *>, 8> Reentered;
+
+  public:
+    explicit LocalDeclsReentryRAII(Sema &SemaRef) : SemaRef(SemaRef) {}
+
+    /// Make the declarations of \p DC visible for unqualified lookup in \p S.
+    void reenter(Scope *S, DeclContext *DC);
+
+    ~LocalDeclsReentryRAII();
+    LocalDeclsReentryRAII(const LocalDeclsReentryRAII &) = delete;
+    LocalDeclsReentryRAII &operator=(const LocalDeclsReentryRAII &) = delete;
+  };
+
   void DiagnoseInvalidJumps(Stmt *Body);
 
   /// The function definitions which were renamed as part of typo-correction

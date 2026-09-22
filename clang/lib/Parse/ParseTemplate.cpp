@@ -1463,14 +1463,23 @@ void Parser::ParseLateTemplatedFuncDef(LateParsedTemplate &LPT) {
        DC = DC->getLexicalParent())
     DeclContextsToReenter.push_back(DC);
 
+  // Names declared in an enclosing function are only reachable through the
+  // scope chain, which is long gone by now, so put them back for the duration
+  // of the late parse. Declared after Scopes so that it is destroyed first,
+  // while the scopes it hands them to are still alive.
+  Sema::LocalDeclsReentryRAII LocalDecls(Actions);
+
   // Reenter scopes from outermost to innermost.
   for (DeclContext *DC : reverse(DeclContextsToReenter)) {
     CurTemplateDepthTracker.addDepth(
         ReenterTemplateScopes(Scopes, cast<Decl>(DC)));
     Scopes.Enter(Scope::DeclScope);
     // We'll reenter the function context itself below.
-    if (DC != FunD)
+    if (DC != FunD) {
       Actions.PushDeclContext(Actions.getCurScope(), DC);
+      if (DC->isFunctionOrMethod())
+        LocalDecls.reenter(Actions.getCurScope(), DC);
+    }
   }
 
   // Parsing should occur with empty FP pragma stack and FP options used in the

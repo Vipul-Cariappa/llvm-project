@@ -322,7 +322,10 @@ struct DefaultedConstructor {
 };
 } // namespace DeclarationParts
 
-// Local-class member bodies are parsed with their enclosing function's body.
+// Local-class member bodies are deferred like any other member body. They are
+// re-parsed long after the enclosing function has been left, so the
+// declarations that surrounded the local class are put back on the scope chain
+// for the late parse.
 namespace LocalClassCases {
 __attribute__((used)) void local_class_method_diagnoses_on_use() {
   struct S {
@@ -335,6 +338,18 @@ __attribute__((used)) void local_class_method_diagnoses_on_use() {
   s.f();
 }
 
+// An unreferenced member of a local class is never parsed, so the errors in it
+// are never diagnosed.
+__attribute__((used)) void unreferenced_local_class_method_is_delayed() {
+  struct S {
+    void unused() { undeclared_in_unused_local_method(); }
+    void used() {}
+  };
+
+  S s;
+  s.used();
+}
+
 __attribute__((used)) void local_class_method_sees_local_typedef() {
   typedef int T;
   struct S {
@@ -345,9 +360,8 @@ __attribute__((used)) void local_class_method_sees_local_typedef() {
   s.f();
 }
 
-// A local-class member body can name a sibling local declaration, so it must be
-// parsed with its enclosing function rather than deferred and re-parsed at the
-// end of the TU (where the enclosing scope is gone).
+// A local-class member body can name a sibling local declaration, which is only
+// reachable through the scope chain, so the late parse has to restore it.
 __attribute__((used)) void local_class_method_sees_sibling_local_class() {
   struct Helper {
     int value() { return 7; }
@@ -382,6 +396,57 @@ __attribute__((used)) void local_class_virtual_method_sees_sibling_local_class()
 
   Derived d;
   (void)d;
+}
+
+// A local typedef declared after the local class is not visible inside it, even
+// though the late parse sees the enclosing function in its entirety.
+__attribute__((used)) void local_class_does_not_see_later_local_typedef() {
+  struct S {
+    int f() {
+      Later l = 0; // expected-error {{unknown type name 'Later'}}
+      return l;
+    }
+  };
+  typedef int Later;
+
+  S s;
+  s.f();
+}
+
+// Restoring the enclosing declarations must not turn an automatic variable of
+// the enclosing function into an ordinary unqualified lookup result.
+__attribute__((used)) int local_class_cannot_capture_enclosing_local() {
+  int enclosing_local = 0; // expected-note {{'enclosing_local' declared here}}
+  struct S {
+    int f() {
+      return enclosing_local; // expected-error {{reference to local variable 'enclosing_local' declared in enclosing function 'LocalClassCases::local_class_cannot_capture_enclosing_local'}}
+    }
+    // The same mistake in a member nobody calls is not reported at all: that
+    // body is never parsed.
+    int unused_member() { return enclosing_local; }
+  };
+
+  S s;
+  return s.f() + enclosing_local;
+}
+
+// Two levels of local class: the member of the inner class still sees what was
+// declared before the outer one.
+__attribute__((used)) void nested_local_class_sees_enclosing_local_class() {
+  struct Helper {
+    int value() { return 7; }
+  };
+  struct Outer {
+    struct Inner {
+      int use() {
+        Helper h;
+        return h.value();
+      }
+    };
+  };
+
+  Outer::Inner i;
+  i.use();
 }
 } // namespace LocalClassCases
 

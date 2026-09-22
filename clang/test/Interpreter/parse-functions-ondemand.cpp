@@ -27,9 +27,16 @@ int fact(int n) { return n <= 1 ? 1 : n * fact(n - 1); }
 auto r4 = printf("fact = %d\n", fact(5));
 // CHECK-NEXT: fact = 120
 
+// Members of a local class are deferred too. Their bodies are parsed long after
+// the enclosing function has been left, so the declarations that surrounded the
+// local class have to be put back on the scope chain first.
+int local_class() { struct Helper { int value() { return 20; } }; struct User { int use() { Helper h; return h.value() + 2; } }; User u; return u.use(); }
+auto r5 = printf("local = %d\n", local_class());
+// CHECK-NEXT: local = 22
+
 // The body of a function that is never used is never parsed, so the errors it
 // contains are never diagnosed.
 int never_used() { this_function_does_not_exist(); return 0; }
 
-auto r5 = printf("done\n");
+auto r6 = printf("done\n");
 // CHECK-NEXT: done

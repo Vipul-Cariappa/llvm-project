@@ -1577,6 +1577,24 @@ static bool AllowOverloadingOfFunction(const LookupResult &Previous,
   return false;
 }
 
+void Sema::LocalDeclsReentryRAII::reenter(Scope *S, DeclContext *DC) {
+  for (Decl *D : DC->decls()) {
+    auto *ND = dyn_cast<NamedDecl>(D);
+    if (!ND || !ND->getDeclName() || S->isDeclScope(ND))
+      continue;
+    S->AddDecl(ND);
+    SemaRef.IdResolver.AddDecl(ND);
+    Reentered.emplace_back(S, ND);
+  }
+}
+
+Sema::LocalDeclsReentryRAII::~LocalDeclsReentryRAII() {
+  for (auto &[S, ND] : llvm::reverse(Reentered)) {
+    S->RemoveDecl(ND);
+    SemaRef.IdResolver.RemoveDecl(ND);
+  }
+}
+
 void Sema::PushOnScopeChains(NamedDecl *D, Scope *S, bool AddToContext) {
   // Move up the scope chain until we find the nearest enclosing
   // non-transparent context. The declaration will be introduced into this
