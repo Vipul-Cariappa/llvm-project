@@ -3553,6 +3553,12 @@ void Parser::ParseLateRecordDefinition(LateParsedRecord &LPR) {
       LocalDecls.reenter(Actions.getCurScope(), DC);
   }
 
+  // The type may first be needed complete inside sizeof, decltype or a
+  // noexcept operand. What the body declares belongs to the body, not to that
+  // operand, so it is parsed in a potentially-evaluated context of its own.
+  EnterExpressionEvaluationContext EvalContext(
+      Actions, Sema::ExpressionEvaluationContext::PotentiallyEvaluated);
+
   // A type is often first needed complete in the middle of a tentative parse,
   // where anything entered into the token stream would be replayed by the
   // Backtrack() that follows. This stream is read to its end right here, so
