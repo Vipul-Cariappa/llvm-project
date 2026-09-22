@@ -349,10 +349,17 @@ private:
   llvm::function_ref<QualType()> ComputeType;
 };
 
+struct LateParsedRecord;
+
 struct SkipBodyInfo {
   SkipBodyInfo() = default;
   bool ShouldSkip = false;
   bool CheckSameAsPrevious = false;
+  /// Set by the parser when it is in a position to cache a tag's
+  /// member-specification instead of parsing it right away.
+  bool CanDefer = false;
+  /// Set by ActOnTag when the member-specification should indeed be cached.
+  bool ShouldDefer = false;
   NamedDecl *Previous = nullptr;
   NamedDecl *New = nullptr;
 };
@@ -1355,6 +1362,16 @@ public:
 
   void SetLateTemplateParser(LateTemplateParserCB *LTP, void *P) {
     LateTemplateParser = LTP;
+    OpaqueParser = P;
+  }
+
+  /// Callback to the parser to parse a deferred member-specification when the
+  /// type is first needed complete.
+  typedef void LateRecordParserCB(void *P, LateParsedRecord &LPR);
+  LateRecordParserCB *LateRecordParser = nullptr;
+
+  void SetLateRecordParser(LateRecordParserCB *LRP, void *P) {
+    LateRecordParser = LRP;
     OpaqueParser = P;
   }
 
@@ -11535,6 +11552,22 @@ public:
       LateParsedTemplateMapT;
   LateParsedTemplateMapT LateParsedTemplateMap;
 
+  typedef llvm::MapVector<const TagDecl *, std::unique_ptr<LateParsedRecord>>
+      LateParsedRecordMapT;
+  LateParsedRecordMapT LateParsedRecordMap;
+
+  /// Stash away the member-specification of \p TD, to be parsed the first time
+  /// the type has to be complete.
+  void MarkAsLateParsedRecord(TagDecl *TD, unsigned TagType,
+                              SourceLocation RecordLoc, CachedTokens &Toks);
+
+  /// Whether \p TD has a member-specification that has not been parsed yet.
+  bool isLateParsedRecord(const TagDecl *TD) const;
+
+  /// Parse the deferred member-specification of \p TD, if it has one. Returns
+  /// true if \p TD has a definition afterwards.
+  bool ParseLateRecordDefinition(TagDecl *TD);
+
   /// Determine the number of levels of enclosing template parameters. This is
   /// only usable while parsing. Note that this does not include dependent
   /// contexts in which no template parameters have yet been declared, such as
@@ -15927,6 +15960,18 @@ struct LateParsedTemplate {
   Decl *D;
   /// Floating-point options in the point of definition.
   FPOptions FPO;
+};
+
+/// A tag whose member-specification has been cached instead of parsed.
+struct LateParsedRecord {
+  /// The '{' through the '}', plus any attributes that followed it.
+  CachedTokens Toks;
+  /// The tag these tokens define.
+  TagDecl *TD;
+  /// The DeclSpec::TST_* the tag was introduced with.
+  unsigned TagType;
+  /// Where the tag starts; ActOnFinishCXXMemberSpecification wants it.
+  SourceLocation RecordLoc;
 };
 
 template <>

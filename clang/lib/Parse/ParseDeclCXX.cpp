@@ -2138,6 +2138,15 @@ void Parser::ParseClassSpecifier(tok::TokenKind TagTokKind,
 
     stripTypeAttributesOffDeclSpec(attrs, DS, TUK);
 
+    // The member-specification can be cached instead of parsed when it starts
+    // right at the '{': a base-clause or a 'final' has to be parsed in the
+    // context it was written in, and a template needs its parameter scopes
+    // re-entered, neither of which is supported yet.
+    SkipBody.CanDefer = getLangOpts().ParseRecordsOnDemand &&
+                        getLangOpts().CPlusPlus &&
+                        TUK == TagUseKind::Definition && Name && !SS.isSet() &&
+                        TParams.empty() && Tok.is(tok::l_brace);
+
     // Declaration or definition of a class type
     TagOrTempResult = Actions.ActOnTag(
         getCurScope(), TagType, TUK, StartLoc, SS, Name, NameLoc, attrs, AS,
@@ -2175,6 +2184,8 @@ void Parser::ParseClassSpecifier(tok::TokenKind TagTokKind,
     if (SkipBody.ShouldSkip)
       SkipCXXMemberSpecification(StartLoc, AttrFixitLoc, TagType,
                                  TagOrTempResult.get());
+    else if (SkipBody.ShouldDefer)
+      DeferCXXMemberSpecification(StartLoc, TagType, TagOrTempResult.get());
     else if (getLangOpts().CPlusPlus)
       ParseCXXMemberSpecification(StartLoc, AttrFixitLoc, attrs, TagType,
                                   TagOrTempResult.get());
@@ -3380,6 +3391,87 @@ void Parser::SkipCXXMemberSpecification(SourceLocation RecordLoc,
     ParsedAttributes Attrs(AttrFactory);
     MaybeParseGNUAttributes(Attrs);
   }
+}
+
+void Parser::DeferCXXMemberSpecification(SourceLocation StartLoc,
+                                         unsigned TagType, Decl *TagD) {
+  assert(Tok.is(tok::l_brace) && "not at the start of a member-specification");
+  assert(TagD && "deferring the body of a tag we do not have");
+
+  CachedTokens Toks;
+  Toks.push_back(Tok);
+  ConsumeBrace();
+  ConsumeAndStoreUntil(tok::r_brace, Toks, /*StopAtSemi=*/false,
+                       /*ConsumeFinalToken=*/true);
+
+  // Attributes written after the '}' belong to the definition, so they have to
+  // be parsed with it.
+  while (Tok.is(tok::kw___attribute)) {
+    Toks.push_back(Tok);
+    ConsumeToken();
+    if (Tok.isNot(tok::l_paren))
+      break;
+    Toks.push_back(Tok);
+    ConsumeParen();
+    ConsumeAndStoreUntil(tok::r_paren, Toks, /*StopAtSemi=*/false,
+                         /*ConsumeFinalToken=*/true);
+  }
+
+  Actions.MarkAsLateParsedRecord(cast<TagDecl>(TagD), TagType, StartLoc, Toks);
+}
+
+void Parser::LateRecordParserCallback(void *P, LateParsedRecord &LPR) {
+  ((Parser *)P)->ParseLateRecordDefinition(LPR);
+}
+
+void Parser::ParseLateRecordDefinition(LateParsedRecord &LPR) {
+  TagDecl *TD = LPR.TD;
+  assert(TD && !LPR.Toks.empty() && "nothing to parse");
+
+  // Destroy TemplateIdAnnotations when we're done, if possible.
+  DestroyTemplateIdAnnotationsRAIIObj CleanupRAII(*this);
+
+  // To restore the context after late parsing.
+  Sema::ContextRAII GlobalSavedContext(
+      Actions, Actions.Context.getTranslationUnitDecl());
+
+  MultiParseScope Scopes(*this);
+
+  // Get the list of DeclContexts to reenter.
+  SmallVector<DeclContext *, 4> DeclContextsToReenter;
+  for (DeclContext *DC = TD->getLexicalDeclContext();
+       DC && !DC->isTranslationUnit(); DC = DC->getLexicalParent())
+    DeclContextsToReenter.push_back(DC);
+
+  Sema::LocalDeclsReentryRAII LocalDecls(Actions);
+
+  // Reenter scopes from outermost to innermost.
+  for (DeclContext *DC : reverse(DeclContextsToReenter)) {
+    Scopes.Enter(Scope::DeclScope);
+    Actions.PushDeclContext(Actions.getCurScope(), DC);
+    if (DC->isFunctionOrMethod())
+      LocalDecls.reenter(Actions.getCurScope(), DC);
+  }
+
+  // A type is often first needed complete in the middle of a tentative parse,
+  // where anything entered into the token stream would be replayed by the
+  // Backtrack() that follows. This stream is read to its end right here, so
+  // keep it out of the backtracking buffer.
+  Preprocessor::SuspendTokenCachingRAII SuspendCaching(PP);
+
+  // Append the current token at the end of the new token stream so that it
+  // doesn't get lost.
+  LPR.Toks.push_back(Tok);
+  PP.EnterTokenStream(LPR.Toks, /*DisableMacroExpansion=*/true,
+                      /*IsReinject=*/true);
+
+  // Consume the previously pushed token.
+  ConsumeAnyToken(/*ConsumeCodeCompletionTok=*/true);
+  assert(Tok.is(tok::l_brace) && "member-specification not starting with '{'");
+
+  ParsedAttributes Attrs(AttrFactory);
+  ParseCXXMemberSpecification(LPR.RecordLoc, /*AttrFixitLoc=*/SourceLocation(),
+                              Attrs, LPR.TagType, TD);
 }
 
 Parser::DeclGroupPtrTy Parser::ParseCXXClassMemberDeclarationWithPragmas(

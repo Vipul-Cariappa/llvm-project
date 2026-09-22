@@ -1387,6 +1387,7 @@ void Sema::PushDeclContext(Scope *S, DeclContext *DC) {
   // enclosing translation unit declaration may not be the current one, so the
   // context being pushed is not lexically contained in CurContext.
   assert((getLangOpts().ParseFunctionsOnDemand ||
+          getLangOpts().ParseRecordsOnDemand ||
           DC->getLexicalParent() == CurContext) &&
          "The next DeclContext should be lexically contained in the current "
          "one.");
@@ -18029,6 +18030,24 @@ static bool isAcceptableTagRedeclContext(Sema &S, DeclContext *OldDC,
   return false;
 }
 
+/// Whether the member-specification of \p New can be left unparsed until
+/// something first requires the type to be complete.
+static bool shouldDeferTagDefinition(TagDecl *New, DeclContext *SearchDC,
+                                     bool Invalid, SkipBodyInfo *SkipBody) {
+  if (!SkipBody || !SkipBody->CanDefer || Invalid || New->isInvalidDecl())
+    return false;
+
+  // Only a C++ class has a member-specification the parser knows how to pick
+  // up again from cached tokens.
+  auto *RD = dyn_cast<CXXRecordDecl>(New);
+  if (!RD || RD->isLambda() || RD->getFriendObjectKind() != Decl::FOK_None)
+    return false;
+
+  // A member or a local class is parsed with the context it was written in, so
+  // only namespace-scope classes are deferred.
+  return SearchDC->getRedeclContext()->isFileContext();
+}
+
 DeclResult
 Sema::ActOnTag(Scope *S, unsigned TagSpec, TagUseKind TUK, SourceLocation KWLoc,
                CXXScopeSpec &SS, IdentifierInfo *Name, SourceLocation NameLoc,
@@ -18684,6 +18703,10 @@ Sema::ActOnTag(Scope *S, unsigned TagSpec, TagUseKind TUK, SourceLocation KWLoc,
 
           // Diagnose attempts to redefine a tag.
           if (TUK == TagUseKind::Definition) {
+            // A tag whose member-specification has not been parsed yet looks
+            // like a forward declaration, so parse it before comparing.
+            if (getLangOpts().ParseRecordsOnDemand)
+              ParseLateRecordDefinition(PrevTagDecl);
             if (TagDecl *Def = PrevTagDecl->getDefinition()) {
               // If the type is currently being defined, complain
               // about a nested redefinition.
@@ -19051,11 +19074,16 @@ CreateNewDecl:
     CheckRedeclarationInModule(New, PrevDecl);
 
   if (TUK == TagUseKind::Definition) {
-    if (!SkipBody || !SkipBody->ShouldSkip) {
-      New->startDefinition();
-    } else {
+    if (SkipBody && SkipBody->ShouldSkip) {
       New->setCompleteDefinition();
       New->demoteThisDefinitionToDeclaration();
+    } else if (shouldDeferTagDefinition(New, SearchDC, Invalid, SkipBody)) {
+      // Leave the tag a forward declaration. The parser caches the
+      // member-specification and hands it back the first time the type has to
+      // be complete.
+      SkipBody->ShouldDefer = true;
+    } else {
+      New->startDefinition();
     }
   }
 
@@ -19120,6 +19148,42 @@ CreateNewDecl:
   } else {
     return New;
   }
+}
+
+void Sema::MarkAsLateParsedRecord(TagDecl *TD, unsigned TagType,
+                                  SourceLocation RecordLoc,
+                                  CachedTokens &Toks) {
+  auto LPR = std::make_unique<LateParsedRecord>();
+  LPR->Toks.swap(Toks);
+  LPR->TD = TD;
+  LPR->TagType = TagType;
+  LPR->RecordLoc = RecordLoc;
+  LateParsedRecordMap.insert(
+      std::make_pair(TD->getCanonicalDecl(), std::move(LPR)));
+}
+
+bool Sema::isLateParsedRecord(const TagDecl *TD) const {
+  return TD && LateParsedRecordMap.count(TD->getCanonicalDecl());
+}
+
+bool Sema::ParseLateRecordDefinition(TagDecl *TD) {
+  if (!LateRecordParser || !TD)
+    return false;
+
+  auto It = LateParsedRecordMap.find(TD->getCanonicalDecl());
+  if (It == LateParsedRecordMap.end())
+    return false;
+
+  // Drop the entry before parsing: the member-specification may well name the
+  // tag again, and that must not start a second parse of the same tokens.
+  std::unique_ptr<LateParsedRecord> LPR = std::move(It->second);
+  LateParsedRecordMap.erase(It);
+
+  // ActOnTag left the tag a forward declaration while its body waited; it
+  // becomes a definition again now that the members are about to be parsed.
+  LPR->TD->startDefinition();
+  LateRecordParser(OpaqueParser, *LPR);
+  return LPR->TD->isCompleteDefinition();
 }
 
 void Sema::ActOnTagStartDefinition(Scope *S, Decl *TagD) {

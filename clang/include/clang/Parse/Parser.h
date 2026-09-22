@@ -3424,6 +3424,17 @@ private:
                                   SourceLocation AttrFixitLoc, unsigned TagType,
                                   Decl *TagDecl);
 
+  /// Consume the member-specification of \p TagDecl without parsing it and
+  /// hand the tokens to Sema, which asks for them back through
+  /// LateRecordParserCallback the first time the type has to be complete.
+  void DeferCXXMemberSpecification(SourceLocation StartLoc, unsigned TagType,
+                                   Decl *TagD);
+
+  /// Parse a member-specification that DeferCXXMemberSpecification put aside.
+  void ParseLateRecordDefinition(LateParsedRecord &LPR);
+
+  static void LateRecordParserCallback(void *P, LateParsedRecord &LPR);
+
   /// ParseCXXMemberSpecification - Parse the class definition.
   ///
   /// \verbatim

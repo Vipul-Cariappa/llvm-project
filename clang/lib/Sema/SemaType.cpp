@@ -9746,6 +9746,12 @@ bool Sema::RequireCompleteTypeImpl(SourceLocation Loc, QualType T,
     if (Def->isInvalidDecl())
       return true;
 
+    // With -fparse-records-ondemand a class whose member-specification has not
+    // been parsed yet is incomplete only because we have not got around to it.
+    if (Tag && getLangOpts().ParseRecordsOnDemand &&
+        ParseLateRecordDefinition(Tag) && !T->isIncompleteType())
+      return RequireCompleteTypeImpl(Loc, T, Kind, Diagnoser);
+
     // Give the external AST source a chance to complete the type.
     if (auto *Source = Context.getExternalSource()) {
       if (Tag && Tag->hasExternalLexicalStorage())

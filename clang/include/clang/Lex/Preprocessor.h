@@ -1790,6 +1790,55 @@ public:
     return !UnannotatedBacktrackTokens.empty();
   }
 
+  /// Takes the token caching layer, and with it any backtracking position that
+  /// is currently set, out of the way.
+  ///
+  /// Tokens entered while backtracking is enabled land in the backtracking
+  /// buffer and are handed out again by the next Backtrack(). That is right
+  /// for tokens that stand in for source the parser will see again, and wrong
+  /// for a self-contained stream that is entered and read to its end in one
+  /// go, which would then be parsed a second time. Bracket entering such a
+  /// stream with this to keep it out of the buffer.
+  class SuspendTokenCachingRAII {
+    Preprocessor &PP;
+    bool WasCaching;
+    CachedTokensTy SavedCachedTokens;
+    CachedTokensTy::size_type SavedCachedLexPos;
+    std::vector<CachedTokensTy::size_type> SavedBacktrackPositions;
+    std::vector<std::pair<CachedTokensTy, CachedTokensTy::size_type>>
+        SavedUnannotatedBacktrackTokens;
+
+  public:
+    explicit SuspendTokenCachingRAII(Preprocessor &PP)
+        : PP(PP), WasCaching(PP.InCachingLexMode()) {
+      PP.ExitCachingLexMode();
+      SavedCachedTokens = std::move(PP.CachedTokens);
+      SavedCachedLexPos = PP.CachedLexPos;
+      SavedBacktrackPositions = std::move(PP.BacktrackPositions);
+      SavedUnannotatedBacktrackTokens =
+          std::move(PP.UnannotatedBacktrackTokens);
+      PP.CachedTokens.clear();
+      PP.CachedLexPos = 0;
+      PP.BacktrackPositions.clear();
+      PP.UnannotatedBacktrackTokens.clear();
+    }
+
+    ~SuspendTokenCachingRAII() {
+      PP.ExitCachingLexMode();
+      PP.CachedTokens = std::move(SavedCachedTokens);
+      PP.CachedLexPos = SavedCachedLexPos;
+      PP.BacktrackPositions = std::move(SavedBacktrackPositions);
+      PP.UnannotatedBacktrackTokens =
+          std::move(SavedUnannotatedBacktrackTokens);
+      if (WasCaching)
+        PP.EnterCachingLexMode();
+    }
+
+    SuspendTokenCachingRAII(const SuspendTokenCachingRAII &) = delete;
+    SuspendTokenCachingRAII &
+    operator=(const SuspendTokenCachingRAII &) = delete;
+  };
+
   /// Lex the next token for this preprocessor.
   void Lex(Token &Result);
 

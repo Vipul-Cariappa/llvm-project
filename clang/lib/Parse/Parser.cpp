@@ -495,6 +495,12 @@ void Parser::Initialize() {
   EnterScope(Scope::DeclScope);
   Actions.ActOnTranslationUnitScope(getCurScope());
 
+  // Unlike a late-parsed function body, a deferred member-specification is
+  // needed in the middle of the parse, as soon as something wants the type
+  // complete, so register for it up front.
+  if (getLangOpts().ParseRecordsOnDemand)
+    Actions.SetLateRecordParser(LateRecordParserCallback, this);
+
   // Initialization for Objective-C context sensitive keywords recognition.
   // Referenced in Parser::ParseObjCTypeQualifierList.
   if (getLangOpts().ObjC) {
