@@ -34,9 +34,22 @@ int local_class() { struct Helper { int value() { return 20; } }; struct User { 
 auto r5 = printf("local = %d\n", local_class());
 // CHECK-NEXT: local = 22
 
+// A class local to a template function works the same way; its bodies are
+// parsed once per instantiation, with the template parameters back in scope.
+template <typename T> T local_class_in_template() { struct Helper { T value() { return T(20); } }; struct User { T use() { Helper h; return h.value() + T(2); } }; User u; return u.use(); }
+auto r6 = printf("local template = %d %.0f\n", local_class_in_template<int>(), local_class_in_template<double>());
+// CHECK-NEXT: local template = 22 22
+
+// Instantiating a local class no longer instantiates the members nobody calls,
+// so a virtual one has to come back when the vtable marks it -- and the one
+// that is only declared must still never be parsed.
+template <typename T> T local_class_virtual() { struct Base { virtual T get() { return T(1); } virtual ~Base() {} }; struct Derived : Base { T get() { return T(7); } T unused() { this_member_does_not_exist(); return T(); } }; Derived d; Base *b = &d; return b->get(); }
+auto r7 = printf("local virtual = %d\n", local_class_virtual<int>());
+// CHECK-NEXT: local virtual = 7
+
 // The body of a function that is never used is never parsed, so the errors it
 // contains are never diagnosed.
 int never_used() { this_function_does_not_exist(); return 0; }
 
-auto r6 = printf("done\n");
+auto r8 = printf("done\n");
 // CHECK-NEXT: done

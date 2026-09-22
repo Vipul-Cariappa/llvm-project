@@ -1,4 +1,5 @@
 // RUN: %clang_cc1 -fincremental-extensions -fparse-functions-ondemand -fsyntax-only -verify -Wall -Wextra -Werror -ferror-limit 0 -std=c++11 %s
+// RUN: %clang_cc1 -fincremental-extensions -fparse-functions-ondemand -fsyntax-only -verify -Wall -Wextra -Werror -ferror-limit 0 -std=c++17 %s
 // RUN: not %clang_cc1 -fincremental-extensions -fparse-functions-ondemand -fdelayed-template-parsing -fsyntax-only -std=c++11 %s 2>&1 | FileCheck %s --check-prefix=MUTEX
 
 // MUTEX: error: invalid argument '-fparse-functions-ondemand' not allowed with '-fdelayed-template-parsing'
@@ -449,6 +450,129 @@ __attribute__((used)) void nested_local_class_sees_enclosing_local_class() {
   i.use();
 }
 } // namespace LocalClassCases
+
+// The same, for a class local to a template function: the template parameter
+// scopes are re-entered along with the enclosing declarations.
+namespace LocalClassInTemplateCases {
+template <typename T>
+T sees_sibling_local_class() {
+  struct Helper {
+    T value() { return T(7); }
+  };
+  struct User {
+    T use() {
+      Helper h; // must still resolve 'Helper'
+      return h.value();
+    }
+  };
+
+  User u;
+  return u.use();
+}
+
+template <typename T>
+T sees_local_typedef_of_template_parameter() {
+  typedef T Alias;
+  struct S {
+    Alias f() { return Alias(3); }
+  };
+
+  S s;
+  return s.f();
+}
+
+template <typename T>
+T diagnoses_on_instantiation() {
+  struct S {
+    T f() {
+      undeclared_in_local_class_template(); // expected-error {{use of undeclared identifier 'undeclared_in_local_class_template'}}
+      return T();
+    }
+    // Instantiating a local class instantiates every member of it, since
+    // nothing outside the enclosing function can name them afterwards. A
+    // member nobody calls is left uninstantiated instead, so that its body
+    // does not have to be parsed to instantiate it.
+    T unused_member() {
+      undeclared_in_unused_local_class_template_member();
+      return T();
+    }
+  };
+
+  S s;
+  return s.f();
+}
+
+// Leaving a member uninstantiated must not lose it. These are all the ways one
+// can still be reached after the class was instantiated.
+template <typename T>
+T used_through_another_member() {
+  struct S {
+    // Written first, so it is reached for instantiation before the member that
+    // calls it has been instantiated.
+    T callee() { return T(2); }
+    T caller() { return callee(); }
+  };
+
+  S s;
+  return s.caller();
+}
+
+template <typename T>
+T used_through_the_vtable() {
+  struct Base {
+    virtual T get() { return T(0); }
+    virtual ~Base() {}
+  };
+  struct Derived : Base {
+    T get() { return T(3); }
+  };
+
+  Derived d;
+  Base *b = &d;
+  return b->get();
+}
+
+__attribute__((used)) int trigger_uninstantiated_local_members() {
+  return used_through_another_member<int>() + used_through_the_vtable<int>();
+}
+
+#if __cplusplus >= 201402L
+// The hardest one: the class leaves its template function through a deduced
+// return type, so the member is reached long after the enclosing instantiation
+// finished and nothing is left to schedule it but the reference itself.
+template <typename T>
+auto escapes_through_deduced_return() {
+  struct S {
+    T get() { return T(4); }
+  };
+
+  return S{};
+}
+
+__attribute__((used)) int trigger_escaped_local_class() {
+  auto s = escapes_through_deduced_return<int>();
+  return s.get();
+}
+#endif
+
+// Never instantiated, so its local class bodies are never parsed and the
+// errors in them are never diagnosed.
+template <typename T>
+T never_instantiated() {
+  struct S {
+    T f() { undeclared_in_uninstantiated_local_class(); return T(); }
+  };
+
+  S s;
+  return s.f();
+}
+
+__attribute__((used)) int trigger_local_class_in_template() {
+  return sees_sibling_local_class<int>() +
+         sees_local_typedef_of_template_parameter<int>() +
+         diagnoses_on_instantiation<int>(); // expected-note {{in instantiation of function template specialization 'LocalClassInTemplateCases::diagnoses_on_instantiation<int>' requested here}}
+}
+} // namespace LocalClassInTemplateCases
 
 // A hidden friend defined inline in a class template is late-parsed on demand.
 // Its body is parsed in the complete-class context, so it must see members of

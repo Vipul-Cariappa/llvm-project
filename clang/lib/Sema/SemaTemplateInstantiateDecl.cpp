@@ -7286,6 +7286,28 @@ void Sema::PerformPendingInstantiations(bool LocalOnly, bool AtEndOfTU) {
         continue;
       }
 
+      // A class local to a template function has all of its members
+      // instantiated along with it, because nothing outside the enclosing
+      // function can name them afterwards and so there is no later point to do
+      // it at. Under on-demand parsing that pulls straight back in what was
+      // deferred: the body of a member nobody called is parsed anyway, at
+      // instantiation time rather than at parse time.
+      //
+      // Leave such a member uninstantiated, and forget its point of
+      // instantiation so that a reference which does turn up later schedules it
+      // again. One still can: the class escapes through a deduced return type,
+      // and its virtual members are marked when the vtable is.
+      if (LocalInstantiation && getLangOpts().ParseFunctionsOnDemand &&
+          !Function->isReferenced()) {
+        FunctionDecl *Pattern = Function->getInstantiatedFromMemberFunction();
+        if (Pattern && Pattern->isLateTemplateParsed()) {
+          if (MemberSpecializationInfo *MSI =
+                  Function->getMemberSpecializationInfo())
+            MSI->setPointOfInstantiation(SourceLocation());
+          continue;
+        }
+      }
+
       bool DefinitionRequired = Function->getTemplateSpecializationKind() ==
                                 TSK_ExplicitInstantiationDefinition;
       if (Function->isMultiVersion()) {
