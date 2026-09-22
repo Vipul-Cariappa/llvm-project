@@ -131,6 +131,19 @@ struct MemberOrder {
   int second() { return 1; }
 };
 int member_order(MemberOrder m) { return m.first(); }
+
+// The same holds one class further in: it is the nested class whose members
+// are visible out of order, not the one whose body was deferred.
+struct NestedMemberOrder {
+  struct Nested {
+    Nested(int a) : m(a) {}
+    int get() { return later(); }
+    int m;
+    int later() { return m; }
+  };
+  Nested n;
+};
+int nested_member_order(NestedMemberOrder o) { return o.n.get(); }
 } // namespace SourceOrder
 
 // The base-clause is cached with the body, so a class with bases is deferred

@@ -19193,10 +19193,21 @@ bool Sema::ParseLateRecordDefinition(TagDecl *TD) {
 const CXXRecordDecl *Sema::getEnclosingLateParsedRecord() const {
   if (LateParsedRecordStack.empty())
     return nullptr;
-  for (const DeclContext *DC = CurContext; DC; DC = DC->getLexicalParent())
-    if (const auto *RD = dyn_cast<CXXRecordDecl>(DC))
-      if (llvm::is_contained(LateParsedRecordStack, RD->getCanonicalDecl()))
-        return RD;
+
+  // Report the innermost class around CurContext, not the one that is being
+  // parsed late: a name in a nested class is in the complete-class context of
+  // that class, so it is the nested one whose members are visible out of
+  // order.
+  const CXXRecordDecl *Innermost = nullptr;
+  for (const DeclContext *DC = CurContext; DC; DC = DC->getLexicalParent()) {
+    const auto *RD = dyn_cast<CXXRecordDecl>(DC);
+    if (!RD)
+      continue;
+    if (!Innermost)
+      Innermost = RD;
+    if (llvm::is_contained(LateParsedRecordStack, RD->getCanonicalDecl()))
+      return Innermost;
+  }
   return nullptr;
 }
 
