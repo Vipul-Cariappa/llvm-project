@@ -3424,10 +3424,20 @@ private:
                                   SourceLocation AttrFixitLoc, unsigned TagType,
                                   Decl *TagDecl);
 
+  /// Find the '{' that opens the member-specification, looking past the
+  /// optional 'final' and the base-clause without parsing them, so that the
+  /// whole definition can be cached as tokens. Returns false, leaving the
+  /// parser where it was, if the shape of what follows is not clear enough to
+  /// be sure which '{' it is.
+  bool findDeferrableClassBodyStart(SourceLocation &BraceLoc);
+
   /// Consume the member-specification of \p TagDecl without parsing it and
   /// hand the tokens to Sema, which asks for them back through
   /// LateRecordParserCallback the first time the type has to be complete.
-  void DeferCXXMemberSpecification(SourceLocation StartLoc, unsigned TagType,
+  /// \p BraceLoc is where findDeferrableClassBodyStart found the body.
+  void DeferCXXMemberSpecification(SourceLocation StartLoc,
+                                   SourceLocation AttrFixitLoc,
+                                   SourceLocation BraceLoc, unsigned TagType,
                                    Decl *TagD);
 
   /// Parse a member-specification that DeferCXXMemberSpecification put aside.

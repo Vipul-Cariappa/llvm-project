@@ -133,16 +133,52 @@ struct MemberOrder {
 int member_order(MemberOrder m) { return m.first(); }
 } // namespace SourceOrder
 
+// The base-clause is cached with the body, so a class with bases is deferred
+// too. Finding where the body starts means looking past the base-clause
+// without parsing it, which the '{' of a braced-init-list inside a template
+// argument could otherwise be mistaken for.
+namespace WithBaseClause {
+struct Base { int b; };
+struct Other { int o; };
+template <typename T> struct Wrap { T t; };
+template <int N> struct Number { int n; };
+
+struct Simple : Base { int d; };
+int simple(Simple s) { return s.b + s.d; }
+
+struct Several : public Base, protected Other { int d; };
+int several(Several s) { return s.d; }
+
+struct Virtual : virtual Base { int d; };
+int virtual_base(Virtual v) { return v.b; }
+
+struct NestedAngles : Wrap<Wrap<int>> { int d; };
+int nested_angles(NestedAngles n) { return n.t.t; }
+
+struct BraceInTemplateArgument : Wrap<decltype(Base{})> { int d; };
+int brace_in_template_argument(BraceInTemplateArgument b) { return b.t.b; }
+
+struct LessThanInTemplateArgument : Number<(1 < 2)> { int d; };
+int less_than_in_template_argument(LessThanInTemplateArgument l) { return l.n; }
+
+struct Final final : Base { int d; };
+int final_with_base(Final f) { return f.b; }
+
+struct FinalWithoutBase final { int d; };
+int final_without_base(FinalWithoutBase f) { return f.d; }
+
+// The base-clause of a class that is never completed is not parsed either.
+struct NeverCompleted : Base {
+  undeclared_type_under_a_base member;
+};
+NeverCompleted *never_completed;
+} // namespace WithBaseClause
+
 // Forms that are not deferred are parsed as they always were.
 namespace NotDeferred {
 // An unnamed class has no name to look up, so it cannot be deferred.
 typedef struct { int t; } Unnamed;
 Unnamed unnamed;
-
-// A base-clause has to be parsed in the context it was written in.
-struct WithBaseSource { int x; };
-struct WithBase : WithBaseSource { int y; };
-WithBase with_base;
 
 // A class template needs its parameter scopes back, which the deferred parse
 // does not restore.

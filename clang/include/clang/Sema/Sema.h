@@ -11559,7 +11559,8 @@ public:
   /// Stash away the member-specification of \p TD, to be parsed the first time
   /// the type has to be complete.
   void MarkAsLateParsedRecord(TagDecl *TD, unsigned TagType,
-                              SourceLocation RecordLoc, CachedTokens &Toks);
+                              SourceLocation RecordLoc,
+                              SourceLocation AttrFixitLoc, CachedTokens &Toks);
 
   /// Whether \p TD has a member-specification that has not been parsed yet.
   bool isLateParsedRecord(const TagDecl *TD) const;
@@ -15980,6 +15981,8 @@ struct LateParsedRecord {
   unsigned TagType;
   /// Where the tag starts; ActOnFinishCXXMemberSpecification wants it.
   SourceLocation RecordLoc;
+  /// Where a misplaced attribute should be moved to, for its fix-it.
+  SourceLocation AttrFixitLoc;
 };
 
 template <>

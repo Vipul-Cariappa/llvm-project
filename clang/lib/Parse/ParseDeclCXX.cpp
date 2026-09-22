@@ -1987,6 +1987,7 @@ void Parser::ParseClassSpecifier(tok::TokenKind TagTokKind,
 
   bool Owned = false;
   SkipBodyInfo SkipBody;
+  SourceLocation DeferredBraceLoc;
   if (TemplateId) {
     // Explicit specialization, class template partial specialization,
     // or explicit instantiation.
@@ -2139,14 +2140,13 @@ void Parser::ParseClassSpecifier(tok::TokenKind TagTokKind,
 
     stripTypeAttributesOffDeclSpec(attrs, DS, TUK);
 
-    // The member-specification can be cached instead of parsed when it starts
-    // right at the '{': a base-clause or a 'final' has to be parsed in the
-    // context it was written in, and a template needs its parameter scopes
-    // re-entered, neither of which is supported yet.
-    SkipBody.CanDefer = getLangOpts().ParseRecordsOnDemand &&
-                        getLangOpts().CPlusPlus &&
-                        TUK == TagUseKind::Definition && Name && !SS.isSet() &&
-                        TParams.empty() && Tok.is(tok::l_brace);
+    // The whole definition, base-clause included, is cached as tokens, so we
+    // have to know where its '{' is before handing it to ActOnTag. A template
+    // is not deferred: the late parse does not restore parameter scopes.
+    SkipBody.CanDefer =
+        getLangOpts().ParseRecordsOnDemand && getLangOpts().CPlusPlus &&
+        TUK == TagUseKind::Definition && Name && !SS.isSet() &&
+        TParams.empty() && findDeferrableClassBodyStart(DeferredBraceLoc);
 
     // Declaration or definition of a class type
     TagOrTempResult = Actions.ActOnTag(
@@ -2186,7 +2186,8 @@ void Parser::ParseClassSpecifier(tok::TokenKind TagTokKind,
       SkipCXXMemberSpecification(StartLoc, AttrFixitLoc, TagType,
                                  TagOrTempResult.get());
     else if (SkipBody.ShouldDefer)
-      DeferCXXMemberSpecification(StartLoc, TagType, TagOrTempResult.get());
+      DeferCXXMemberSpecification(StartLoc, AttrFixitLoc, DeferredBraceLoc,
+                                  TagType, TagOrTempResult.get());
     else if (getLangOpts().CPlusPlus)
       ParseCXXMemberSpecification(StartLoc, AttrFixitLoc, attrs, TagType,
                                   TagOrTempResult.get());
@@ -3394,12 +3395,99 @@ void Parser::SkipCXXMemberSpecification(SourceLocation RecordLoc,
   }
 }
 
+bool Parser::findDeferrableClassBodyStart(SourceLocation &BraceLoc) {
+  if (Tok.is(tok::l_brace)) {
+    BraceLoc = Tok.getLocation();
+    return true;
+  }
+  if (Tok.isNot(tok::colon) && !isClassCompatibleKeyword())
+    return false;
+
+  RevertingTentativeParsingAction Scan(*this);
+
+  // A base-specifier is a type, so the only '{' that can turn up inside one is
+  // in a template-argument-list or behind a '(' or '['. The brackets are
+  // tracked exactly; the angles only heuristically, because '<' is also
+  // less-than. Getting the angles wrong runs the scan into the ';' that closes
+  // the declaration, and the definition is then parsed the ordinary way.
+  unsigned AngleDepth = 0;
+  bool AfterName = false;
+  while (true) {
+    bool IsName = Tok.isOneOf(tok::identifier, tok::annot_typename,
+                              tok::annot_template_id);
+    switch (Tok.getKind()) {
+    case tok::l_brace:
+      if (AngleDepth == 0) {
+        BraceLoc = Tok.getLocation();
+        return true;
+      }
+      ConsumeBrace();
+      if (!SkipUntil(tok::r_brace, StopAtSemi))
+        return false;
+      break;
+
+    case tok::l_paren:
+      ConsumeParen();
+      if (!SkipUntil(tok::r_paren, StopAtSemi))
+        return false;
+      break;
+
+    case tok::l_square:
+      ConsumeBracket();
+      if (!SkipUntil(tok::r_square, StopAtSemi))
+        return false;
+      break;
+
+    case tok::less:
+      if (AfterName)
+        ++AngleDepth;
+      ConsumeToken();
+      break;
+
+    case tok::greater:
+      if (AngleDepth)
+        --AngleDepth;
+      ConsumeToken();
+      break;
+
+    case tok::greatergreater:
+      AngleDepth -= std::min(AngleDepth, 2u);
+      ConsumeToken();
+      break;
+
+    case tok::eof:
+    case tok::annot_repl_input_end:
+    case tok::semi:
+    case tok::comma:
+    case tok::r_brace:
+    case tok::r_paren:
+    case tok::r_square:
+      // None of these can sit at the top level of a base-clause.
+      return false;
+
+    default:
+      ConsumeAnyToken();
+      break;
+    }
+    AfterName = IsName;
+  }
+}
+
 void Parser::DeferCXXMemberSpecification(SourceLocation StartLoc,
+                                         SourceLocation AttrFixitLoc,
+                                         SourceLocation BraceLoc,
                                          unsigned TagType, Decl *TagD) {
-  assert(Tok.is(tok::l_brace) && "not at the start of a member-specification");
   assert(TagD && "deferring the body of a tag we do not have");
 
   CachedTokens Toks;
+  // Everything up to the body: 'final', attributes and the base-clause.
+  while (!(Tok.is(tok::l_brace) && Tok.getLocation() == BraceLoc)) {
+    assert(Tok.isNot(tok::eof) &&
+           "ran past the body findDeferrableClassBodyStart found");
+    Toks.push_back(Tok);
+    ConsumeAnyToken();
+  }
+
   Toks.push_back(Tok);
   ConsumeBrace();
   ConsumeAndStoreUntil(tok::r_brace, Toks, /*StopAtSemi=*/false,
@@ -3418,7 +3506,8 @@ void Parser::DeferCXXMemberSpecification(SourceLocation StartLoc,
                          /*ConsumeFinalToken=*/true);
   }
 
-  Actions.MarkAsLateParsedRecord(cast<TagDecl>(TagD), TagType, StartLoc, Toks);
+  Actions.MarkAsLateParsedRecord(cast<TagDecl>(TagD), TagType, StartLoc,
+                                 AttrFixitLoc, Toks);
 }
 
 void Parser::LateRecordParserCallback(void *P, LateParsedRecord &LPR) {
@@ -3478,11 +3567,13 @@ void Parser::ParseLateRecordDefinition(LateParsedRecord &LPR) {
 
   // Consume the previously pushed token.
   ConsumeAnyToken(/*ConsumeCodeCompletionTok=*/true);
-  assert(Tok.is(tok::l_brace) && "member-specification not starting with '{'");
+  assert(
+      (Tok.isOneOf(tok::l_brace, tok::colon) || isClassCompatibleKeyword()) &&
+      "not at the start of a class definition");
 
   ParsedAttributes Attrs(AttrFactory);
-  ParseCXXMemberSpecification(LPR.RecordLoc, /*AttrFixitLoc=*/SourceLocation(),
-                              Attrs, LPR.TagType, TD);
+  ParseCXXMemberSpecification(LPR.RecordLoc, LPR.AttrFixitLoc, Attrs,
+                              LPR.TagType, TD);
 }
 
 Parser::DeclGroupPtrTy Parser::ParseCXXClassMemberDeclarationWithPragmas(

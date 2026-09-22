@@ -19152,12 +19152,14 @@ CreateNewDecl:
 
 void Sema::MarkAsLateParsedRecord(TagDecl *TD, unsigned TagType,
                                   SourceLocation RecordLoc,
+                                  SourceLocation AttrFixitLoc,
                                   CachedTokens &Toks) {
   auto LPR = std::make_unique<LateParsedRecord>();
   LPR->Toks.swap(Toks);
   LPR->TD = TD;
   LPR->TagType = TagType;
   LPR->RecordLoc = RecordLoc;
+  LPR->AttrFixitLoc = AttrFixitLoc;
   LateParsedRecordMap.insert(
       std::make_pair(TD->getCanonicalDecl(), std::move(LPR)));
 }
