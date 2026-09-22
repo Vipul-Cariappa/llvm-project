@@ -1214,9 +1214,15 @@ static bool IsVisibleAtLateParsedLookupPoint(Sema &S, SourceLocation LookupLoc,
 
 static bool IsVisibleAtLateParsedLookupPoint(Sema &S, LookupResult &R,
                                              NamedDecl *D) {
-  auto res =
-      IsVisibleAtLateParsedLookupPoint(S, R.getLookupNameInfo().getLoc(), D);
-  return res;
+  // A lookup that is about to declare something is asking which declaration to
+  // merge with, not which one a body is allowed to name. Hiding the answer
+  // would not make the program ill-formed, it would build a second, unrelated
+  // entity -- a friend declaration in a deferred body, say, would befriend a
+  // class of its own rather than the one further down the file.
+  if (R.isForRedeclaration())
+    return true;
+
+  return IsVisibleAtLateParsedLookupPoint(S, R.getLookupNameInfo().getLoc(), D);
 }
 
 // Adds all qualifying matches for a name within a decl context to the

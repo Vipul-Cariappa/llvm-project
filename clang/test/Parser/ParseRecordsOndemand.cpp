@@ -144,6 +144,26 @@ struct NestedMemberOrder {
   Nested n;
 };
 int nested_member_order(NestedMemberOrder o) { return o.n.get(); }
+// A declaration in a deferred body is a declaration of the entity further down
+// the file, not of a new one. Source order does not come into it: hiding the
+// later declaration here would befriend a second, unrelated 'Iter'.
+namespace RedeclarationInDeferredBody {
+struct Ref {
+public:
+  int value() const { return m; }
+
+private:
+  friend struct Iter;
+  Ref(int a) : m(a) {}
+  int m;
+};
+
+struct Iter {
+  Ref get() { return Ref(1); }
+};
+
+int use(Iter i) { return i.get().value(); }
+} // namespace RedeclarationInDeferredBody
 } // namespace SourceOrder
 
 // The base-clause is cached with the body, so a class with bases is deferred
