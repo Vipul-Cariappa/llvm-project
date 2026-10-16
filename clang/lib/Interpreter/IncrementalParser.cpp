@@ -90,8 +90,18 @@ IncrementalParser::ParseOrWrapTopLevelDecl() {
   if (Diags.hasErrorOccurred()) {
     CleanUpPTU(C.getTranslationUnitDecl());
 
+    // Whatever CodeGen emitted for this input goes with it. Left in place it
+    // would be handed to the JIT as part of the next input that succeeds, and
+    // by then what it refers to has been withdrawn.
+    Act->discardModule();
+
     Diags.Reset(/*soft=*/true);
     Diags.getClient()->clear();
+
+    // Definitions Sema instantiated for earlier inputs were refused while the
+    // error stood. Now that it is cleared they can go into the fresh module.
+    Act->reemitDeferredDecls();
+
     return llvm::make_error<llvm::StringError>("Parsing failed.",
                                                std::error_code());
   }

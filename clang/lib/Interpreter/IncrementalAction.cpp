@@ -68,7 +68,8 @@ IncrementalAction::CreateASTConsumer(CompilerInstance & /*CI*/,
     return std::make_unique<MultiplexConsumer>(std::move(Cs));
   }
 
-  return std::make_unique<InProcessPrintingASTConsumer>(std::move(C), Interp);
+  return std::make_unique<InProcessPrintingASTConsumer>(std::move(C), Interp,
+                                                        *this);
 }
 
 void IncrementalAction::ExecuteAction() {
@@ -120,6 +121,18 @@ std::unique_ptr<llvm::Module> IncrementalAction::GenModule() {
   return nullptr;
 }
 
+void IncrementalAction::discardModule() { GenModule(); }
+
+void IncrementalAction::reemitDeferredDecls() {
+  if (DeclsToReemit.empty())
+    return;
+
+  ASTConsumer &C = CI.getSema().getASTConsumer();
+  for (Decl *D : DeclsToReemit)
+    C.HandleTopLevelDecl(DeclGroupRef(D));
+  DeclsToReemit.clear();
+}
+
 CodeGenerator *IncrementalAction::getCodeGen() const {
   FrontendAction *WrappedAct = getWrapped();
   if (!WrappedAct || !WrappedAct->hasIRSupport())
@@ -128,8 +141,8 @@ CodeGenerator *IncrementalAction::getCodeGen() const {
 }
 
 InProcessPrintingASTConsumer::InProcessPrintingASTConsumer(
-    std::unique_ptr<ASTConsumer> C, Interpreter &I)
-    : MultiplexConsumer(std::move(C)), Interp(I) {}
+    std::unique_ptr<ASTConsumer> C, Interpreter &I, IncrementalAction &Act)
+    : MultiplexConsumer(std::move(C)), Interp(I), Act(Act) {}
 
 bool InProcessPrintingASTConsumer::HandleTopLevelDecl(DeclGroupRef DGR) {
   if (DGR.isNull())
@@ -137,8 +150,20 @@ bool InProcessPrintingASTConsumer::HandleTopLevelDecl(DeclGroupRef DGR) {
 
   CompilerInstance *CI = Interp.getCompilerInstance();
   DiagnosticsEngine &Diags = CI->getDiagnostics();
-  if (Diags.hasErrorOccurred())
+  if (Diags.hasErrorOccurred()) {
+    // Dropping what this input declared is the point: it is about to be
+    // withdrawn. But an error does not stop Sema from instantiating a template
+    // an earlier input declared, and such a definition outlives this input.
+    // CodeGen emits nothing while an error stands, and no later input
+    // re-instantiates it, so dropping it would leave a name that is already
+    // referenced with no definition anywhere. Hold on to it instead; the
+    // interpreter hands it back once it has reset the diagnostics.
+    TranslationUnitDecl *TU = CI->getASTContext().getTranslationUnitDecl();
+    for (Decl *D : DGR)
+      if (D->getTranslationUnitDecl() != TU)
+        Act.deferReemission(D);
     return true;
+  }
 
   for (Decl *D : DGR)
     if (auto *TLSD = llvm::dyn_cast<TopLevelStmtDecl>(D))

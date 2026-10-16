@@ -106,6 +106,12 @@ namespace {
     }
 
     std::unique_ptr<llvm::Module> ReleaseModule() {
+      // An input that errored out never reached Release(), so whatever it
+      // deferred is still queued. StartModule() asserts the queue was drained,
+      // and this module is not going to drain it, so hand the decls back for a
+      // later module to emit.
+      if (Diags.hasErrorOccurred())
+        Builder->redeferPendingEmissions();
       return std::exchange(M, nullptr);
     }
 

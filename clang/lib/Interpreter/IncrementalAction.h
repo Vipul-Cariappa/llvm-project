@@ -11,6 +11,7 @@
 
 #include "clang/Frontend/FrontendActions.h"
 #include "clang/Frontend/MultiplexConsumer.h"
+#include "llvm/ADT/SmallVector.h"
 
 namespace llvm {
 class Module;
@@ -18,6 +19,7 @@ class Module;
 
 namespace clang {
 
+class Decl;
 class Interpreter;
 class CodeGenerator;
 
@@ -40,6 +42,10 @@ private:
   /// When CodeGen is created the first llvm::Module gets cached in many places
   /// and we must keep it alive.
   std::unique_ptr<llvm::Module> CachedInCodeGenModule;
+
+  /// Definitions CodeGen refused while the diagnostics were in an error state,
+  /// waiting to be handed over once they are reset.
+  llvm::SmallVector<Decl *, 4> DeclsToReemit;
 
 public:
   IncrementalAction(CompilerInstance &Instance, llvm::LLVMContext &LLVMCtx,
@@ -74,13 +80,28 @@ public:
 
   /// Generate an LLVM module for the most recent parsed input.
   std::unique_ptr<llvm::Module> GenModule();
+
+  /// Throw away what CodeGen emitted for an input that failed to parse and
+  /// start a fresh module.
+  void discardModule();
+
+  /// Remember a definition CodeGen would refuse right now, because an input
+  /// raised an error and CodeGen emits nothing while that is the case.
+  void deferReemission(Decl *D) { DeclsToReemit.push_back(D); }
+
+  /// Hand over the definitions collected by deferReemission(). Only meaningful
+  /// once the diagnostics have been reset, since that is what made CodeGen
+  /// refuse them in the first place.
+  void reemitDeferredDecls();
 };
 
 class InProcessPrintingASTConsumer final : public MultiplexConsumer {
   Interpreter &Interp;
+  IncrementalAction &Act;
 
 public:
-  InProcessPrintingASTConsumer(std::unique_ptr<ASTConsumer> C, Interpreter &I);
+  InProcessPrintingASTConsumer(std::unique_ptr<ASTConsumer> C, Interpreter &I,
+                               IncrementalAction &Act);
 
   bool HandleTopLevelDecl(DeclGroupRef DGR) override;
 };

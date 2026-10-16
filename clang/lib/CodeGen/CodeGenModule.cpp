@@ -1009,6 +1009,14 @@ void CodeGenModule::checkAliases() {
   }
 }
 
+void CodeGenModule::redeferPendingEmissions() {
+  for (GlobalDecl GD : DeferredDeclsToEmit)
+    DeferredDecls[getMangledName(GD)] = GD;
+  DeferredDeclsToEmit.clear();
+  DeferredDecls.insert_range(EmittedDeferredDecls);
+  EmittedDeferredDecls.clear();
+}
+
 void CodeGenModule::clear() {
   DeferredDeclsToEmit.clear();
   EmittedDeferredDecls.clear();

@@ -27,4 +27,23 @@ auto r1 = printf("i = %d\n", i);
 printf("i = %d\n", i);
 // CHECK: i = 42
 
+// Referencing something CodeGen emits lazily queues it up, and a failed input
+// never reaches the point where the queue is drained. Dropping its module has
+// to hand what it queued back, rather than emitting it (the module is going
+// away) or forgetting it (a later input may reference it again).
+template <class X> X lazy(X x) { return x * 2; }
+int j = lazy(2); int k = undeclared_thing; // expected-error {{use of undeclared identifier 'undeclared_thing'}}
+inline int inl(int x) { return x + 1; }
+int l = inl(1); int m = undeclared_thing; // expected-error {{use of undeclared identifier 'undeclared_thing'}}
+printf("inl = %d, lazy = %d\n", inl(3), lazy(4));
+// CHECK: inl = 4, lazy = 8
+
+// The same for a template that only fails once it is instantiated, where what
+// the input queued up for emission is the specialization itself.
+template <class X> int fails_when_instantiated(X x) { return x.no_such_member(); }
+struct NoMember {};
+int n = fails_when_instantiated(NoMember{}); // expected-error {{no member named 'no_such_member' in 'NoMember'}}
+printf("i = %d\n", i);
+// CHECK: i = 42
+
 %quit

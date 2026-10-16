@@ -740,6 +740,11 @@ public:
 
   void clear();
 
+  /// For incremental compilation, hand back the decls that were
+  /// referenced but never emitted because a parser error was encountered,
+  /// so that a later module can still emit them
+  void redeferPendingEmissions();
+
   /// Finalize LLVM code generation.
   void Release();
 
