@@ -4127,10 +4127,6 @@ bool CompilerInvocation::ParseLangArgs(LangOptions &Opts, ArgList &Args,
 #include "clang/Options/Options.inc"
 #undef LANG_OPTION_WITH_MARSHALLING
 
-  // delayed parsing has incompatible lookup semantics with ondemand parsing
-  if (Opts.ParseFunctionsOnDemand && Opts.DelayedTemplateParsing)
-    Diags.Report(diag::err_drv_argument_not_allowed_with)
-        << "-fparse-functions-ondemand" << "-fdelayed-template-parsing";
 
   // On-demand parsing leaves the bodies of unused functions and of unused
   // records unparsed, so they are never emitted. That is only safe when
@@ -4147,6 +4143,25 @@ bool CompilerInvocation::ParseLangArgs(LangOptions &Opts, ArgList &Args,
     Diags.Report(diag::warn_drv_parse_ondemand_not_incremental)
         << "-fparse-records-ondemand";
   }
+
+  // The record half does not stand on its own: a member body parsed eagerly
+  // inside a member-specification that is itself being parsed late is subject
+  // to the source-order filter, and a name it uses that is declared further
+  // down the class -- an enumerator of a member enum, say, whose lexical
+  // context is the enum rather than the class -- is hidden from it. Deferring
+  // the member bodies as well parses them once the class is complete, where
+  // the complete-class rule applies and nothing is hidden. So
+  // -fparse-records-ondemand turns the function half on as well.
+  // Note that this is not overridable: the negative spelling of a BoolFOption
+  // has no CC1Option, so by the time this runs there is nothing left to say
+  // that -fno-parse-functions-ondemand was ever passed -- and a configuration
+  // that cannot parse libstdc++ is not worth keeping reachable anyway.
+  Opts.ParseFunctionsOnDemand |= Opts.ParseRecordsOnDemand;
+
+  // delayed parsing has incompatible lookup semantics with ondemand parsing
+  if (Opts.ParseFunctionsOnDemand && Opts.DelayedTemplateParsing)
+    Diags.Report(diag::err_drv_argument_not_allowed_with)
+        << "-fparse-functions-ondemand" << "-fdelayed-template-parsing";
 
   // "Modules semantics" (e.g. cross-translation-unit declaration merging) are
   // needed for both Clang (header) modules and C++20 modules, so enable them

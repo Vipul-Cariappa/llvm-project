@@ -12,4 +12,9 @@ struct Contracted {
 
 extern "C" float use(Contracted w) { return w.f(1, 2, 3); }
 
+// -fparse-records-ondemand turns -fparse-functions-ondemand on, so a function
+// nobody calls has no body to emit. Call it.
+Contracted c;
+float r = use(c);
+
 // CHECK: call float @llvm.fmuladd.f32

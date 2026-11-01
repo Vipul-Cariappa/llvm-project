@@ -98,11 +98,12 @@ struct S { int b; }; // expected-error {{redefinition of 'S'}}
 } // namespace Redefinition
 
 // A class that never gets a definition is still diagnosed as incomplete.
+// At namespace scope rather than in a function body: -fparse-records-ondemand
+// turns -fparse-functions-ondemand on, and the body of a function nobody calls
+// is never parsed, so nothing in one is ever diagnosed.
 namespace StillIncomplete {
 struct Undefined; // expected-note {{forward declaration of 'StillIncomplete::Undefined'}}
-void use() {
-  Undefined u; // expected-error {{variable has incomplete type 'Undefined'}}
-}
+Undefined u;      // expected-error {{variable has incomplete type 'Undefined'}}
 } // namespace StillIncomplete
 
 // A deferred body is parsed long after the declarations that follow it have

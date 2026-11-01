@@ -28,6 +28,11 @@ using T = decltype(NeededByDecltype(0).m);
 
 extern "C" int use_after_decltype() { return NeededByDecltype(4).m; }
 
+// -fparse-records-ondemand turns -fparse-functions-ondemand on, so a function
+// nobody calls has no body to emit. Call them.
+int r1 = use_after_sizeof();
+int r2 = use_after_decltype();
+
 // CHECK-DAG: define{{.*}} i32 @use_after_sizeof()
 // CHECK-DAG: define{{.*}} i32 @use_after_decltype()
 
