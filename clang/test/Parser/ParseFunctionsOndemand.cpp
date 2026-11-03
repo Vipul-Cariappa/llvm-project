@@ -758,6 +758,28 @@ __attribute__((used)) void trigger_sfinae_with_capturing_lambda(Emitter &E) {
 }
 } // namespace SFINAEWithCapturingLambda
 
+// Substitution into a function template's signature is driven by the point of
+// use, not by where the template was written: a trait specialized below the
+// template is still visible to it. The member found in the specialization need
+// not be a type -- here it is an enumerator -- so the source-order restriction
+// has to be lifted for every kind of declaration a substitution looks up, not
+// just for types. This is the shape an expression-template library's SFINAE
+// takes, and it is what stops <Eigen/Dense> from parsing when it is not
+// handled.
+namespace TraitSpecializedAfterTemplate {
+template <class T> struct traits;
+
+template <class T> void with_trait(T, int (*)[traits<T>::size] = 0) {}
+
+struct Tagged {};
+template <> struct traits<Tagged> { enum { size = 2 }; };
+
+__attribute__((used)) void trigger_trait_specialized_after_template() {
+  Tagged t;
+  with_trait(t);
+}
+} // namespace TraitSpecializedAfterTemplate
+
 // Anonymous-namespace function templates are still parsed on instantiation, and
 // dependent lookups in their signatures and bodies must resolve normally.
 namespace AnonymousNamespaceTemplateLookup {

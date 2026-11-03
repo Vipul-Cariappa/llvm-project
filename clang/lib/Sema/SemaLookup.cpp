@@ -1135,7 +1135,11 @@ static bool IsVisibleAtLateParsedLookupPoint(Sema &S, SourceLocation LookupLoc,
   if (D->isImplicit())
     return true;
 
-  // We are substituting template types.
+  // We are substituting into a template. A lookup made while substituting is
+  // written in the template, but it happens for the sake of a use somewhere
+  // else, and it is that use -- which may be anywhere in the translation unit
+  // -- that decides what the lookup may see. The lookup location here is the
+  // one in the pattern, so source order must not be applied to it at all.
   // Example:
   // template <typename T>
   // typename T::result foo(T &callback) { return callback(); }
@@ -1145,9 +1149,12 @@ static bool IsVisibleAtLateParsedLookupPoint(Sema &S, SourceLocation LookupLoc,
   // } callback;
   // foo(callback);
   //
-  // Lookup of CallMe::result needs to succeesd even thought
-  // CallMe::result is declared "after" the template being parsed
-  if (!S.CodeSynthesisContexts.empty() && isa<TypeDecl>(D)) {
+  // Lookup of CallMe::result has to succeed even though CallMe::result is
+  // declared "after" the template being parsed. This holds for anything a
+  // substitution names, not just for types: a trait specialized below the
+  // template may just as well supply a value, as traits<T>::size does in
+  // every expression-template library.
+  if (!S.CodeSynthesisContexts.empty()) {
     switch (S.CodeSynthesisContexts.back().Kind) {
     case Sema::CodeSynthesisContext::ExplicitTemplateArgumentSubstitution:
     case Sema::CodeSynthesisContext::DeducedTemplateArgumentSubstitution:
